@@ -1,4 +1,4 @@
-# PuffinPyEditor/plugins/theme_editor/theme_editor_dialog.py
+# Koromali/plugins/theme_editor/theme_editor_dialog.py
 import re
 import datetime
 import copy
@@ -59,16 +59,16 @@ class ThemeEditorDialog(QDialog):
         self.setWindowTitle("Theme Customizer")
         self.setMinimumSize(QSize(950, 700))
         self.setModal(True)
-        # MODIFIED: Added missing color keys to the group definitions for a complete UI
+        # Added missing color keys to ensure they appear in the editor UI.
         self.COLOR_GROUPS = {
-            "Window & General": ["window.background", "sidebar.background", "accent"],
-            "Editor": ["editor.background", "editor.foreground", "editor.userHighlightBackground",
-                       "editor.lineHighlightBackground", "editor.selectionBackground"],
-            "Editor Gutter": ["editorGutter.background",
-                              "editorGutter.foreground", "editorLineNumber.foreground",
-                              "editorLineNumber.activeForeground"],
-            "Editor Matching": ["editor.matchingBracketBackground",
-                                "editor.matchingBracketForeground"],
+            "Window & General": ["window.background", "sidebar.background", "accent", "icon.foreground"],
+            "Editor": ["editor.background", "editor.foreground", "editor.selectionBackground",
+                       "editor.lineHighlightBackground", "editor.userHighlightBackground",
+                       "editor.breakpoint.color"],
+            "Editor Gutter": ["editorGutter.background", "editorGutter.foreground",
+                              "editorGutter.hoverBackground", "editorLineNumber.foreground",
+                              "editorLineNumber.activeForeground", "gutter.activeLineNumberForeground"],
+            "Editor Matching": ["editor.matchingBracketBackground", "editor.matchingBracketForeground"],
             "Controls": ["button.background", "button.foreground",
                          "input.background", "input.foreground", "input.border"],
             "Bars & Menus": ["statusbar.background", "statusbar.foreground",
@@ -87,9 +87,12 @@ class ThemeEditorDialog(QDialog):
                 "git.added", "git.modified", "git.deleted",
                 "git.status.foreground"
             ],
-            "Tree View": [
-                "tree.indentationGuides.stroke", "tree.trace.color",
-                "tree.trace.shadow", "tree.node.color", "tree.node.fill"
+            "Tree & List View": [
+                "tree.indexntationGuides.stroke", "tree.trace.color",
+                "tree.trace.shadow", "tree.node.color", "tree.node.fill",
+                "list.hoverBackground", "list.activeSelectionBackground",
+                "list.activeSelectionForeground", "list.inactiveSelectionBackground",
+                "list.inactiveSelectionForeground"
             ]
         }
         self.current_theme_id = None
@@ -272,7 +275,7 @@ class ThemeEditorDialog(QDialog):
         new_id = f"custom_{safe_name}_{timestamp}"
 
         original_theme['name'] = new_name
-        original_theme['author'] = "PuffinPy User"
+        original_theme['author'] = "Koromali User"
         original_theme['is_custom'] = True
 
         self.theme_manager.add_or_update_custom_theme(new_id, original_theme)
@@ -294,8 +297,8 @@ class ThemeEditorDialog(QDialog):
             self.theme_manager.delete_custom_theme(self.current_theme_id)
             self.custom_themes_changed.emit()
             if self.current_theme_id == self.theme_manager.current_theme_id:
-                self.theme_manager.set_theme("puffin_dark")
-            self._repopulate_theme_list(select_theme_id="puffin_dark")
+                self.theme_manager.set_theme("Koromali_dark")
+            self._repopulate_theme_list(select_theme_id="Koromali_dark")
 
     def _action_save(self):
         if not self.is_custom_theme or not self.unsaved_changes:

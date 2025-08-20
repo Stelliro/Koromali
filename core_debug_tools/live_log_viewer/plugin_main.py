@@ -1,16 +1,16 @@
-# PuffinPyEditor/core_debug_tools/live_log_viewer/plugin_main.py
+# Koromali/core_debug_tools/live_log_viewer/plugin_main.py
 import subprocess
 import sys
 import os
-from app_core.puffin_api import PuffinPluginAPI
+from app_core.koromali_api import KoromaliPluginAPI
 from utils.logger import log, LOG_FILE
 from utils.helpers import get_base_path
 
 LOG_VIEWER_SCRIPT_PATH = os.path.join(get_base_path(), "utils", "log_viewer.py")
 
 class LiveLogViewerPlugin:
-    def __init__(self, puffin_api: PuffinPluginAPI):
-        self.api = puffin_api
+    def __init__(self, koromali_api: KoromaliPluginAPI):
+        self.api = koromali_api
         self.log_file = LOG_FILE
         self.action = self.api.add_menu_action(
             menu_name="tools", text="Live Log Viewer",
@@ -29,5 +29,5 @@ class LiveLogViewerPlugin:
         except Exception as e:
             self.api.log_error(f"Failed to launch log viewer: {e}")
 
-def initialize(puffin_api: PuffinPluginAPI):
-    return LiveLogViewerPlugin(puffin_api)
+def initialize(koromali_api: KoromaliPluginAPI):
+    return LiveLogViewerPlugin(koromali_api)

@@ -3,22 +3,22 @@ import os
 import json
 from PyQt6.QtWidgets import QMessageBox
 
-from app_core.puffin_api import PuffinPluginAPI
+from app_core.koromali_api import KoromaliPluginAPI
 from utils.helpers import get_base_path
 from utils.logger import log
 from .new_plugin_dialog import NewPluginDialog
 
 # Boilerplate content for the new plugin's main Python file
 PLUGIN_MAIN_BOILERPLATE = """
-from app_core.puffin_api import PuffinPluginAPI
+from app_core.koromali_api import KoromaliPluginAPI
 from utils.logger import log
 
 class {class_name}:
     \"\"\"
     Main class for the {plugin_name} plugin.
     \"\"\"
-    def __init__(self, puffin_api: PuffinPluginAPI):
-        self.api = puffin_api
+    def __init__(self, koromali_api: KoromaliPluginAPI):
+        self.api = koromali_api
         self.main_window = self.api.get_main_window()
         
         # TODO: Add your plugin's initialization logic here.
@@ -45,18 +45,18 @@ class {class_name}:
         log.info("{plugin_name} is shutting down.")
 
 
-def initialize(puffin_api: PuffinPluginAPI):
+def initialize(koromali_api: KoromaliPluginAPI):
     \"\"\"
-    Entry point for the plugin. PuffinPyEditor calls this to create an
+    Entry point for the plugin. Koromali calls this to create an
     instance of your plugin.
     \"\"\"
-    return {class_name}(puffin_api)
+    return {class_name}(koromali_api)
 
 """
 
 class PluginInitializer:
-    def __init__(self, puffin_api: PuffinPluginAPI):
-        self.api = puffin_api
+    def __init__(self, koromali_api: KoromaliPluginAPI):
+        self.api = koromali_api
         self.main_window = self.api.get_main_window()
         self.base_plugins_path = os.path.join(get_base_path(), 'plugins')
         
@@ -101,7 +101,7 @@ class PluginInitializer:
             # 4. Create plugin.json
             json_path = os.path.join(plugin_path, 'plugin.json')
             with open(json_path, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=4)
+                json.dump(data, f, indexnt=4)
 
             # 5. Create plugin_main.py
             main_py_path = os.path.join(plugin_path, data['entry_point'])
@@ -141,6 +141,6 @@ class PluginInitializer:
         )
 
 
-def initialize(puffin_api: PuffinPluginAPI):
+def initialize(koromali_api: KoromaliPluginAPI):
     """Entry point for the Plugin Initializer tool."""
-    return PluginInitializer(puffin_api)
+    return PluginInitializer(koromali_api)

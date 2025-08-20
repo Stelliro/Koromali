@@ -1,7 +1,7 @@
 {
     "id": "installer_builder",
     "name": "Installer Builder",
-    "author": "PuffinPy Team",
+    "author": "Koromali Team",
     "version": "2.0.0",
     "description": "Builds a Windows installer from a directory of already-built application files.",
     "entry_point": "plugin_main.py"

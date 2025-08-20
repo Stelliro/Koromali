@@ -1,20 +1,21 @@
-# PuffinPyEditor/app_core/file_handler.py
+# Koromali/app_core/file_handler.py
 import os
 import sys
 import shutil
 import subprocess
 import re
-from typing import Optional, Tuple, Any, Dict, List
+from typing import Optional, Tuple, Any, Dict, List, TYPE_CHECKING
 from PyQt6.QtWidgets import (QFileDialog, QMessageBox, QComboBox, QLabel, QDialogButtonBox, QGridLayout,
                              QProgressDialog)
 from PyQt6.QtGui import QGuiApplication, QDesktopServices
 from PyQt6.QtCore import QUrl, pyqtSignal, QObject, Qt, QRunnable, QThreadPool
 
-from .settings_manager import settings_manager
 from utils.logger import log
-from utils.helpers import clean_git_conflict_markers
+from utils.helpers import clean_git_conflict_markers, is_binary_file, LARGE_FILE_SIZE_BYTES
 
-# --- NEW: Background Worker for BOM Removal ---
+if TYPE_CHECKING:
+    from app_core.settings_manager import SettingsManager
+
 class BOMWorkerSignals(QObject):
     """Defines signals available from a running BOMRemovalWorker."""
     progress = pyqtSignal(str)
@@ -39,15 +40,12 @@ class BOMRemovalWorker(QRunnable):
 
         try:
             if os.path.isfile(self.path):
-                # Handle a single file
                 processed, fixed = self._process_file(self.path)
             elif os.path.isdir(self.path):
-                # Handle a directory
                 for root, _, files in os.walk(self.path):
                     if self.is_cancelled: break
                     for filename in files:
                         if self.is_cancelled: break
-                        # Check if file type is likely to be text
                         if os.path.splitext(filename)[1].lower() in self.TEXT_EXTENSIONS:
                             filepath = os.path.join(root, filename)
                             p, f = self._process_file(filepath)
@@ -69,15 +67,12 @@ class BOMRemovalWorker(QRunnable):
                 bom = f.read(3)
             
             if bom == b'\xef\xbb\xbf':
-                with open(filepath, 'rb') as f:
-                    content = f.read()
-                with open(filepath, 'wb') as f:
-                    f.write(content[3:])
-                return 1, 1 # Processed 1, fixed 1
+                with open(filepath, 'rb') as f: content = f.read()
+                with open(filepath, 'wb') as f: f.write(content[3:])
+                return 1, 1 
             else:
-                return 1, 0 # Processed 1, fixed 0
+                return 1, 0
         except (IOError, OSError):
-            # Probably a binary file or permission error, just skip it
             return 1, 0
 
     def cancel(self):
@@ -89,35 +84,20 @@ class SaveAsDialog(QFileDialog):
         super().__init__(parent)
         self.setWindowTitle("Save File As")
         self.setAcceptMode(QFileDialog.AcceptMode.AcceptSave)
-        # Using a non-native dialog is necessary to add custom widgets.
         self.setOption(QFileDialog.Option.DontUseNativeDialog, True)
-
-        self.encoding_map = {
-            "UTF-8": "utf-8",
-            "UTF-8 with BOM": "utf-8-sig",
-            "UTF-16 LE": "utf-16le",
-            "UTF-16 BE": "utf-16be",
-            "Latin-1 (ISO-8859-1)": "latin-1",
-            "Windows-1252": "cp1252"
-        }
-        
+        self.encoding_map = {"UTF-8": "utf-8", "UTF-8 with BOM": "utf-8-sig", "UTF-16 LE": "utf-16le",
+                             "UTF-16 BE": "utf-16be", "Latin-1 (ISO-8859-1)": "latin-1", "Windows-1252": "cp1252"}
         self.encoding_combo = QComboBox()
         self.encoding_combo.addItems(self.encoding_map.keys())
-
-        # Add the encoding combobox to the dialog's layout
         layout = self.layout()
         if isinstance(layout, QGridLayout):
-            # Find the row of the button box to insert our widget above it
-            button_box = self.findChild(QDialogButtonBox)
-            if button_box:
+            if button_box := self.findChild(QDialogButtonBox):
                 row, _, _, _ = layout.getItemPosition(layout.indexOf(button_box))
-                # Add our new widgets in the row just above the buttons
                 layout.addWidget(QLabel("Encoding:"), row - 1, 0, 1, 1, Qt.AlignmentFlag.AlignRight)
                 layout.addWidget(self.encoding_combo, row - 1, 1, 1, 2)
 
     def get_selected_encoding(self) -> str:
-        selected_text = self.encoding_combo.currentText()
-        return self.encoding_map.get(selected_text, "utf-8")
+        return self.encoding_map.get(self.encoding_combo.currentText(), "utf-8")
 
 
 class FileHandler(QObject):
@@ -125,11 +105,11 @@ class FileHandler(QObject):
     item_renamed = pyqtSignal(str, str, str)
     item_deleted = pyqtSignal(str, str)
     recent_files_changed = pyqtSignal()
-    # A list of common encodings to try when opening a file
     COMMON_ENCODINGS = ['utf-8', 'utf-8-sig', 'utf-16', 'latin-1', 'cp1252']
     
-    def __init__(self, parent_window: Optional[Any] = None):
+    def __init__(self, settings_manager: "SettingsManager", parent_window: Optional[Any] = None):
         super().__init__()
+        self.settings_manager = settings_manager
         self.parent_window = parent_window
         self.threadpool = QThreadPool()
         self.bom_worker = None
@@ -137,22 +117,19 @@ class FileHandler(QObject):
         self._internal_clipboard: Dict[str, Optional[str]] = { "operation": None, "path": None }
 
     def _read_with_encoding_detection(self, filepath: str) -> Tuple[Optional[str], Optional[str]]:
-        """Tries to read a file with several common encodings."""
         for encoding in self.COMMON_ENCODINGS:
             try:
                 with open(filepath, 'r', encoding=encoding) as f:
                     content = f.read()
-                log.info(f"Successfully read file {filepath} with encoding {encoding}")
+                log.info(f"Read file {filepath} with encoding {encoding}")
                 return content, encoding
             except (UnicodeDecodeError, TypeError):
                 continue
-        
-        # As a last resort, try to read with 'ignore' errors
         try:
             with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
                 content = f.read()
-            log.warning(f"Read file {filepath} with UTF-8, ignoring errors. Some characters may be lost.")
-            return content, 'utf-8' # Treat as utf-8 but it's lossy
+            log.warning(f"Read {filepath} with UTF-8, ignoring errors.")
+            return content, 'utf-8'
         except Exception:
             return None, None
 
@@ -160,204 +137,109 @@ class FileHandler(QObject):
         log.info("FileHandler: new_file action invoked.")
         return { "content": "", "filepath": None, "new_file_default_name": "Untitled", "encoding": "utf-8" }
 
-    def open_file_dialog(self) -> Tuple[Optional[str], Optional[str], Optional[str], Optional[str]]:
-        last_dir = settings_manager.get("last_opened_directory", os.path.expanduser("~"))
-        filepath, _ = QFileDialog.getOpenFileName(self.parent_window, "Open File", last_dir, "All Supported Files (*.py *.pyw *.txt *.md *.json *.js *.html *.css *.c *.cpp *.h *.hpp *.cs *.rs);;All Files (*)")
-        if not filepath: return None, None, None, None
-        settings_manager.set("last_opened_directory", os.path.dirname(filepath))
-        try:
-            original_content, detected_encoding = self._read_with_encoding_detection(filepath)
-            if original_content is None:
-                raise IOError("Could not decode the file with any of the supported encodings.")
-
-            # Automatically clean git conflict markers when opening a file.
-            content = clean_git_conflict_markers(original_content)
-            if content != original_content:
-                log.info(f"Cleaned git conflict markers from {filepath} on load.")
-                # Ask user if they want to save the cleaned file
-                reply = QMessageBox.question(
-                    self.parent_window,
-                    "Conflict Markers Removed",
-                    f"Git conflict markers were found and removed from '{os.path.basename(filepath)}'.\n\n"
-                    "Do you want to save these changes back to the file immediately?",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                    QMessageBox.StandardButton.Yes
-                )
-                if reply == QMessageBox.StandardButton.Yes:
-                    with open(filepath, 'w', encoding=detected_encoding) as f:
-                        f.write(content)
-                    log.info(f"Saved automatically cleaned file: {filepath}")
-
-            self._add_to_recent_files(filepath)
-            return filepath, content, detected_encoding, None
-        except (IOError, OSError) as e:
-            msg = (f"Error opening file '{os.path.basename(filepath)}'.\n\nReason: {e}")
-            log.error(msg, exc_info=True); return None, None, None, msg
+    def open_file_dialog(self) -> Optional[str]:
+        last_dir = self.settings_manager.get("last_opened_directory", os.path.expanduser("~"))
+        filepath, _ = QFileDialog.getOpenFileName(
+            self.parent_window, 
+            "Open File", 
+            last_dir, 
+            "All Supported Files (*.py *.pyw *.txt *.md *.json *.js *.html *.css *.c *.cpp *.h *.hpp *.cs *.rs);;All Files (*)"
+        )
+        if filepath:
+            self.settings_manager.set("last_opened_directory", os.path.dirname(filepath))
+        return filepath
 
     def save_file_content(self, filepath: Optional[str], content: str, save_as: bool = False, encoding: str = 'utf-8') -> Tuple[Optional[str], Optional[str]]:
         dir_exists = filepath and os.path.exists(os.path.dirname(filepath))
         final_encoding = encoding
 
         if save_as or not filepath or not dir_exists:
-            last_dir = os.path.dirname(filepath) if dir_exists else settings_manager.get("last_saved_directory", os.path.expanduser("~"))
+            last_dir = os.path.dirname(filepath) if dir_exists else self.settings_manager.get("last_saved_directory", os.path.expanduser("~"))
             sugg_name = os.path.basename(filepath) if filepath else "Untitled.py"
 
-            dialog = SaveAsDialog(self.parent_window)
-            dialog.setDirectory(last_dir)
-            dialog.selectFile(sugg_name)
-            
-            # Setup proper file type filters
-            filters = [
-                "Python Files (*.py *.pyw)",
-                "Text Files (*.txt)",
-                "Markdown Files (*.md)",
-                "JSON Files (*.json)",
-                "JavaScript Files (*.js)",
-                "HTML Files (*.html *.htm)",
-                "CSS Files (*.css)",
-                "C++ Source Files (*.cpp *.cxx *.cc)",
-                "C/C++ Header Files (*.h *.hpp)",
-                "C# Source Files (*.cs)",
-                "Rust Source Files (*.rs)",
-                "All Files (*)"
-            ]
-            dialog.setNameFilters(filters)
+            dialog = SaveAsDialog(self.parent_window); dialog.setDirectory(last_dir); dialog.selectFile(sugg_name)
+            dialog.setNameFilters(["Python Files (*.py *.pyw)", "Text Files (*.txt)", "Markdown (*.md)", "JSON (*.json)", "JavaScript (*.js)", "HTML (*.html *.htm)", "CSS (*.css)", "C++ Source (*.cpp *.cxx *.cc)", "C/C++ Header (*.h *.hpp)", "C# Source (*.cs)", "Rust (*.rs)", "All Files (*)"])
 
-            if dialog.exec():
-                path_from_dialog = dialog.selectedFiles()[0]
-                final_encoding = dialog.get_selected_encoding()
-            else:
-                return None, None # User cancelled
+            if dialog.exec(): path_from_dialog, final_encoding = dialog.selectedFiles()[0], dialog.get_selected_encoding()
+            else: return None, None 
 
             filepath = path_from_dialog
-            settings_manager.set("last_saved_directory", os.path.dirname(filepath))
+            self.settings_manager.set("last_saved_directory", os.path.dirname(filepath))
         
         try:
-            # --- ATOMIC SAVE IMPLEMENTATION ---
-            # 1. Write to a temporary file in the same directory.
-            temp_file = filepath + ".puffin-save.tmp"
-            with open(temp_file, 'w', encoding=final_encoding) as f:
-                f.write(content)
-
-            # 2. Atomically replace the original file with the new one.
-            # This is much safer than a direct overwrite.
+            temp_file = filepath + ".Koromali-save.tmp"
+            with open(temp_file, 'w', encoding=final_encoding) as f: f.write(content)
             os.replace(temp_file, filepath)
-            
             log.info(f"Atomically saved file '{filepath}' with encoding '{final_encoding}'.")
             return filepath, final_encoding
         except (IOError, OSError, UnicodeEncodeError) as e:
             msg = f"Error saving file '{filepath}' with encoding '{final_encoding}': {e}"
-            log.error(msg, exc_info=True)
-            QMessageBox.critical(self.parent_window, "Error Saving File", msg)
-            # Clean up the temporary file if the final replace fails
-            if os.path.exists(temp_file):
-                os.remove(temp_file)
+            log.error(msg, exc_info=True); QMessageBox.critical(self.parent_window, "Error Saving File", msg)
+            if 'temp_file' in locals() and os.path.exists(temp_file): os.remove(temp_file)
             return None, None
             
     def remove_boms_in_path(self, path: str):
-        """Public method to start the BOM removal process."""
-        reply = QMessageBox.question(
-            self.parent_window,
-            "Confirm BOM Removal",
-            "This will scan for and remove the UTF-8 Byte Order Mark (BOM) from the beginning of text files.\n\n"
-            "This action modifies files in place. Are you sure you want to continue?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
-            QMessageBox.StandardButton.Yes
-        )
-        if reply == QMessageBox.StandardButton.Cancel:
+        if QMessageBox.question(self, "Confirm BOM Removal", "This will scan and remove the UTF-8 BOM from text files in place. Continue?", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel) == QMessageBox.StandardButton.Cancel:
             return
-
         self.progress_dialog = QProgressDialog("Scanning for BOMs...", "Cancel", 0, 100, self.parent_window)
         self.progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
         self.progress_dialog.setWindowTitle("Removing BOMs")
-        self.progress_dialog.setValue(0)
-        self.progress_dialog.setAutoClose(False)
+        self.progress_dialog.setValue(0); self.progress_dialog.setAutoClose(False)
 
         self.bom_worker = BOMRemovalWorker(path)
         self.bom_worker.signals.progress.connect(self._on_bom_progress_update)
         self.bom_worker.signals.finished.connect(self._on_bom_finished)
         self.progress_dialog.canceled.connect(self.bom_worker.cancel)
-
         self.threadpool.start(self.bom_worker)
 
     def _on_bom_progress_update(self, filename: str):
-        if self.progress_dialog:
-            self.progress_dialog.setLabelText(f"Checking: {filename}")
+        if self.progress_dialog: self.progress_dialog.setLabelText(f"Checking: {filename}")
 
     def _on_bom_finished(self, processed_count: int, fixed_count: int, errors: List[str]):
-        if self.progress_dialog:
-            self.progress_dialog.close()
-
-        summary_message = (
-            f"BOM removal process complete.\n\n"
-            f"- Files scanned: {processed_count}\n"
-            f"- Files fixed: {fixed_count}"
-        )
+        if self.progress_dialog: self.progress_dialog.close()
+        summary_message = f"BOM removal complete.\n\n- Files scanned: {processed_count}\n- Files fixed: {fixed_count}"
         if errors:
             summary_message += f"\n\nEncountered {len(errors)} error(s):\n" + "\n".join(errors[:3])
-            if len(errors) > 3:
-                summary_message += "\n... (see log for more details)"
-        
+            if len(errors) > 3: summary_message += "\n... (see log for details)"
         QMessageBox.information(self.parent_window, "BOM Removal Complete", summary_message)
-        # Refresh the file explorer to reflect any changes
-        if self.parent_window.explorer_panel:
-            self.parent_window.explorer_panel.refresh()
+        if self.parent_window.explorer_panel: self.parent_window.explorer_panel.refresh()
 
     def create_file(self, path: str) -> Tuple[bool, Optional[str]]:
         try:
-            if os.path.exists(path): item_type = "folder" if os.path.isdir(path) else "file"; return False, f"A {item_type} named '{os.path.basename(path)}' already exists."
+            if os.path.exists(path): return False, f"A {'folder' if os.path.isdir(path) else 'file'} named '{os.path.basename(path)}' already exists."
             with open(path, 'w', encoding='utf-8'): pass
             log.info(f"Created file: {path}"); self.item_created.emit("file", path); return True, None
         except OSError as e: log.error(f"Failed to create file at {path}: {e}", exc_info=True); return False, f"Failed to create file: {e}"
 
     def create_folder(self, path: str) -> Tuple[bool, Optional[str]]:
         try:
-            if os.path.exists(path): item_type = "folder" if os.path.isdir(path) else "file"; return False, f"A {item_type} named '{os.path.basename(path)}' already exists."
+            if os.path.exists(path): return False, f"A {'folder' if os.path.isdir(path) else 'file'} named '{os.path.basename(path)}' already exists."
             os.makedirs(path); log.info(f"Created folder: {path}"); self.item_created.emit("folder", path); return True, None
         except OSError as e: log.error(f"Failed to create folder at {path}: {e}", exc_info=True); return False, f"Failed to create folder: {e}"
 
     def rename_item(self, old_path: str, new_name: str) -> Tuple[bool, str]:
-        """Renames a file or folder, handling case-sensitivity issues."""
         new_name = new_name.strip()
-        if not new_name:
-            return False, "Name cannot be empty."
-
-        if re.search(r'[<>:"/\\|?*]', new_name):
-            return False, 'Name contains illegal characters (e.g., \\ / : * ? " < > |).'
-        
+        if not new_name: return False, "Name cannot be empty."
+        if re.search(r'[<>:"/\\|?*]', new_name): return False, 'Name contains illegal characters (\\ / : * ? " < > |).'
         new_path = os.path.join(os.path.dirname(old_path), new_name)
 
-        # Case-sensitive check
         if old_path.lower() == new_path.lower() and old_path != new_path:
-            # This is a case-only rename on a potentially case-insensitive filesystem.
-            # Perform a safe two-step rename.
-            temp_path = old_path + '.puffin_rename_temp'
+            temp_path = old_path + '.Koromali_rename_temp'
             try:
-                os.rename(old_path, temp_path)
-                os.rename(temp_path, new_path)
+                os.rename(old_path, temp_path); os.rename(temp_path, new_path)
                 item_type = 'folder' if os.path.isdir(new_path) else 'file'
-                self.item_renamed.emit(item_type, old_path, new_path)
-                return True, new_path
+                self.item_renamed.emit(item_type, old_path, new_path); return True, new_path
             except OSError as e:
-                log.error(f"Failed to perform case-rename on '{old_path}': {e}", exc_info=True)
-                # If it failed, try to rename back
-                if os.path.exists(temp_path):
-                    os.rename(temp_path, old_path)
+                log.error(f"Failed to case-rename '{old_path}': {e}", exc_info=True)
+                if os.path.exists(temp_path): os.rename(temp_path, old_path)
                 return False, f"Failed to rename: {e}"
 
-        # Standard check for existing file
-        if os.path.exists(new_path):
-            return False, f"'{new_name}' already exists in this location."
+        if os.path.exists(new_path): return False, f"'{new_name}' already exists."
 
         try:
-            item_type = 'folder' if os.path.isdir(old_path) else 'file'
-            os.rename(old_path, new_path)
-            log.info(f"Renamed '{old_path}' to '{new_path}'")
-            self.item_renamed.emit(item_type, old_path, new_path)
-            return True, new_path
-        except OSError as e:
-            log.error(f"Failed to rename '{old_path}': {e}", exc_info=True)
-            return False, f"Failed to rename: {e}"
+            item_type = 'folder' if os.path.isdir(old_path) else 'file'; os.rename(old_path, new_path)
+            log.info(f"Renamed '{old_path}' to '{new_path}'"); self.item_renamed.emit(item_type, old_path, new_path); return True, new_path
+        except OSError as e: log.error(f"Failed to rename '{old_path}': {e}", exc_info=True); return False, f"Failed to rename: {e}"
 
     def delete_item(self, path):
         item_type = 'file' if os.path.isfile(path) else 'folder'
@@ -369,91 +251,84 @@ class FileHandler(QObject):
 
     def copy_path_to_clipboard(self, path):
         try:
-            QGuiApplication.clipboard().setText(os.path.normpath(path)); log.info(f"Copied path to clipboard: {path}")
-            if self.parent_window and hasattr(self.parent_window, "statusBar"): self.parent_window.statusBar().showMessage("Path copied to clipboard", 2000)
-        except Exception as e: log.error(f"Could not copy path to clipboard: {e}")
+            QGuiApplication.clipboard().setText(os.path.normpath(path)); log.info(f"Copied path: {path}")
+            if hasattr(self.parent_window, "statusBar"): self.parent_window.statusBar().showMessage("Path copied", 2000)
+        except Exception as e: log.error(f"Could not copy path: {e}")
 
     def reveal_in_explorer(self, path):
-        path_to_show = os.path.normpath(path)
+        path = os.path.normpath(path)
         try:
-            if sys.platform == 'win32': subprocess.run(['explorer', '/select,', path_to_show] if not os.path.isdir(path_to_show) else ['explorer', path_to_show])
-            elif sys.platform == 'darwin': subprocess.run(['open', path_to_show] if os.path.isdir(path_to_show) else ['open', '-R', path_to_show])
-            else: subprocess.run(['xdg-open', path_to_show if os.path.isdir(path_to_show) else os.path.dirname(path_to_show)])
-        except Exception as e: log.error(f"Could not open file browser for path '{path}': {e}"); QMessageBox.warning(self.parent_window, "Error", f"Could not open file browser: {e}")
+            if sys.platform == 'win32': subprocess.run(['explorer', '/select,', path] if not os.path.isdir(path) else ['explorer', path])
+            elif sys.platform == 'darwin': subprocess.run(['open', '-R', path])
+            else: subprocess.run(['xdg-open', os.path.dirname(path)])
+        except Exception as e: log.error(f"Could not open file browser: {e}"); QMessageBox.warning(self.parent_window, "Error", f"Could not open browser: {e}")
 
     def open_with_default_app(self, path):
         try: QDesktopServices.openUrl(QUrl.fromLocalFile(path))
-        except Exception as e: log.error(f"Failed to open '{path}' with default app: {e}"); QMessageBox.warning(self.parent_window, "Error", f"Could not open file with default application: {e}")
+        except Exception as e: log.error(f"Failed to open '{path}': {e}"); QMessageBox.warning(self.parent_window, "Error", f"Could not open file: {e}")
 
     def duplicate_item(self, path):
-        dir_name, (base_name, ext) = os.path.dirname(path), os.path.splitext(os.path.basename(path))
-        counter = 1; new_path = os.path.join(dir_name, f"{base_name}_copy{ext}")
-        while os.path.exists(new_path): counter += 1; new_path = os.path.join(dir_name, f"{base_name}_copy_{counter}{ext}")
+        dir, (base, ext) = os.path.dirname(path), os.path.splitext(os.path.basename(path))
+        c, new_path = 1, os.path.join(dir, f"{base}_copy{ext}")
+        while os.path.exists(new_path): c += 1; new_path = os.path.join(dir, f"{base}_copy_{c}{ext}")
         try:
-            item_type = "folder";
-            if os.path.isfile(path): shutil.copy2(path, new_path); item_type = "file"
-            elif os.path.isdir(path): shutil.copytree(path, new_path)
+            item_type = "folder" if os.path.isdir(path) else "file"
+            if item_type == "file": shutil.copy2(path, new_path)
+            else: shutil.copytree(path, new_path)
             log.info(f"Duplicated '{path}' to '{new_path}'"); self.item_created.emit(item_type, new_path); return True, None
         except (OSError, shutil.Error) as e: log.error(f"Failed to duplicate '{path}': {e}", exc_info=True); return False, f"Failed to duplicate: {e}"
 
-    def cut_item(self, path): self._internal_clipboard = {"operation": "cut", "path": path}
-    def copy_item(self, path): self._internal_clipboard = {"operation": "copy", "path": path}
+    def cut_item(self, path): 
+        self._internal_clipboard = {"operation": "cut", "path": path}
+        if hasattr(self.parent_window, "statusBar"): self.parent_window.statusBar().showMessage(f"Cut: {os.path.basename(path)}", 3000)
+
+    def copy_item(self, path): 
+        self._internal_clipboard = {"operation": "copy", "path": path}
+        if hasattr(self.parent_window, "statusBar"): self.parent_window.statusBar().showMessage(f"Copied: {os.path.basename(path)}", 3000)
+        
     def paste_item(self, dest_dir):
-        op, src_path = self._internal_clipboard.get("operation"), self._internal_clipboard.get("path")
-        if not op or not src_path or not os.path.exists(src_path): return False, "Nothing to paste."
-        if not os.path.isdir(dest_dir): return False, "Paste destination must be a folder."
-        dest_path = os.path.join(dest_dir, os.path.basename(src_path))
-        if os.path.exists(dest_path): return False, f"'{os.path.basename(dest_path)}' already exists in the destination."
+        op, src = self._internal_clipboard.get("operation"), self._internal_clipboard.get("path")
+        if not op or not src or not os.path.exists(src) or not os.path.isdir(dest_dir): return False, "Nothing to paste or invalid destination."
+        dest = os.path.join(dest_dir, os.path.basename(src))
+        if os.path.exists(dest): return False, f"'{os.path.basename(dest)}' already exists."
         try:
-            item_type = 'folder' if os.path.isdir(src_path) else 'file'
+            itype = 'folder' if os.path.isdir(src) else 'file'
             if op == "cut":
-                shutil.move(src_path, dest_path); log.info(f"Moved '{src_path}' to '{dest_path}'")
-                self.item_renamed.emit(item_type, src_path, dest_path); self._internal_clipboard = {"operation": None, "path": None}
+                shutil.move(src, dest); log.info(f"Moved '{src}' to '{dest}'")
+                self.item_renamed.emit(itype, src, dest); self._internal_clipboard = {"operation": None, "path": None}
             elif op == "copy":
-                shutil.copytree(src_path, dest_path) if os.path.isdir(src_path) else shutil.copy2(src_path, dest_path)
-                log.info(f"Copied '{src_path}' to '{dest_path}'"); self.item_created.emit(item_type, dest_path)
+                if os.path.isdir(src): shutil.copytree(src, dest)
+                else: shutil.copy2(src, dest)
+                log.info(f"Copied '{src}' to '{dest}'"); self.item_created.emit(itype, dest)
             return True, None
-        except (OSError, shutil.Error) as e: log.error(f"Paste operation failed: {e}", exc_info=True); return False, f"Paste operation failed: {e}"
+        except (OSError, shutil.Error) as e: log.error(f"Paste failed: {e}", exc_info=True); return False, f"Paste failed: {e}"
 
     def move_item(self, src_path, dest_dir):
-        if not os.path.exists(src_path): return False, "Source path does not exist."
-        if not os.path.isdir(dest_dir): return False, "Destination must be a folder."
-        dest_path = os.path.join(dest_dir, os.path.basename(src_path))
-        if os.path.normpath(src_path) == os.path.normpath(dest_path): return True, dest_path
-        if os.path.exists(dest_path): return False, f"'{os.path.basename(src_path)}' already exists in the destination."
-        if os.path.isdir(src_path) and os.path.normpath(dest_dir).startswith(os.path.normpath(src_path)): return False, "Cannot move a folder into its own subdirectory."
-        try: item_type = 'folder' if os.path.isdir(src_path) else 'file'; shutil.move(src_path, dest_path); log.info(f"Moved '{src_path}' to '{dest_path}'"); self.item_renamed.emit(item_type, src_path, dest_path); return True, dest_path
-        except (OSError, shutil.Error) as e: log.error(f"Move operation failed: {e}", exc_info=True); return False, f"Move operation failed: {e}"
+        if not (os.path.exists(src_path) and os.path.isdir(dest_dir)): return False, "Invalid source or destination."
+        dest = os.path.join(dest_dir, os.path.basename(src_path))
+        if os.path.normpath(src_path) == os.path.normpath(dest): return True, dest
+        if os.path.exists(dest): return False, f"'{os.path.basename(src_path)}' already exists."
+        if os.path.isdir(src_path) and os.path.normpath(dest_dir).startswith(os.path.normpath(src_path)): return False, "Cannot move a folder into itself."
+        try:
+            itype = 'folder' if os.path.isdir(src_path) else 'file'; shutil.move(src_path, dest)
+            log.info(f"Moved '{src_path}' to '{dest}'"); self.item_renamed.emit(itype, src_path, dest); return True, dest
+        except (OSError, shutil.Error) as e: log.error(f"Move failed: {e}", exc_info=True); return False, f"Move failed: {e}"
 
     def copy_item_to_dest(self, src_path: str, dest_dir: str) -> Tuple[bool, Optional[str]]:
-        """Copies a file or folder to a destination directory."""
-        if not os.path.exists(src_path):
-            return False, "Source path does not exist."
-        if not os.path.isdir(dest_dir):
-            return False, "Destination must be a folder."
-
-        dest_path = os.path.join(dest_dir, os.path.basename(src_path))
-        if os.path.exists(dest_path):
-            return False, f"'{os.path.basename(src_path)}' already exists in the destination."
-
+        if not (os.path.exists(src_path) and os.path.isdir(dest_dir)): return False, "Invalid source or destination."
+        dest = os.path.join(dest_dir, os.path.basename(src_path))
+        if os.path.exists(dest): return False, f"'{os.path.basename(src_path)}' already exists."
         try:
-            item_type = 'folder' if os.path.isdir(src_path) else 'file'
-            if item_type == 'folder':
-                shutil.copytree(src_path, dest_path)
-            else:  # it's a file
-                shutil.copy2(src_path, dest_path)
-
-            log.info(f"Copied '{src_path}' to '{dest_path}'")
-            self.item_created.emit(item_type, dest_path)
-            return True, dest_path
-        except (OSError, shutil.Error) as e:
-            log.error(f"Copy operation failed: {e}", exc_info=True)
-            return False, f"Copy operation failed: {e}"
+            itype = 'folder' if os.path.isdir(src_path) else 'file'
+            if itype == 'folder': shutil.copytree(src_path, dest)
+            else: shutil.copy2(src_path, dest)
+            log.info(f"Copied '{src_path}' to '{dest}'"); self.item_created.emit(itype, dest); return True, dest
+        except (OSError, shutil.Error) as e: log.error(f"Copy failed: {e}", exc_info=True); return False, f"Copy failed: {e}"
 
     def get_clipboard_status(self): return self._internal_clipboard.get("operation")
     def _add_to_recent_files(self, filepath):
         if not filepath: return
-        recents = settings_manager.get("recent_files", []);
+        recents = self.settings_manager.get("recent_files", []);
         if filepath in recents: recents.remove(filepath)
-        recents.insert(0, filepath); max_files = settings_manager.get("max_recent_files", 10)
-        settings_manager.set("recent_files", recents[:max_files]); self.recent_files_changed.emit()
+        recents.insert(0, filepath); max_files = self.settings_manager.get("max_recent_files", 10)
+        self.settings_manager.set("recent_files", recents[:max_files]); self.recent_files_changed.emit()

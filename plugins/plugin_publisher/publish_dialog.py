@@ -1,4 +1,4 @@
-# PuffinPyEditor/plugins/plugin_publisher/publish_dialog.py
+# Koromali/plugins/plugin_publisher/publish_dialog.py
 import os
 import shutil
 import tempfile
@@ -13,12 +13,12 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 
 # --- Content for auto-initializing a distro repo ---
-README_CONTENT = """# PuffinPyEditor Plugin Distribution Repository
-This repository is structured to serve plugins for the PuffinPyEditor.
+README_CONTENT = """# Koromali Plugin Distribution Repository
+This repository is structured to serve plugins for the Koromali.
 - `index.json`: A manifest file listing all available plugins and their download URLs.
 - `zips/`: This directory contains the packaged `.zip` files for each plugin.
 To publish a new version of a plugin, use the "Publish Plugin" tool inside
-PuffinPyEditor.
+Koromali.
 """
 GITIGNORE_CONTENT = """# Ignore common temp files
 *.tmp, *.bak, *~
@@ -314,7 +314,7 @@ class PublishDialog(QDialog):
         if primary_idx != -1:
             self.repo_combo.setCurrentIndex(primary_idx)
 
-    def _on_plugin_selected(self, index=0):
+    def _on_plugin_selected(self, indexx=0):
         plugin_data = self.plugin_selector.currentData()
         if not plugin_data:
             self.commit_message.clear()
@@ -410,7 +410,7 @@ class PublishDialog(QDialog):
         self._set_ui_locked(True)
         self.log_output.clear()
         self._add_log("Starting plugin publication process...")
-        self._temp_dir = tempfile.mkdtemp(prefix="puffin-plugin-publish-")
+        self._temp_dir = tempfile.mkdtemp(prefix="Koromali-plugin-publish-")
         self.git_manager.git_success.connect(self._on_git_step_success)
         self.git_manager.git_error.connect(self._on_publish_failed)
         self._current_step = "CLONE"
@@ -512,7 +512,7 @@ class PublishDialog(QDialog):
             plural = 's' if count > 1 else ''
             commit_msg = f"feat(plugins): Update {count} plugin{plural}"
         elif len(self.publish_queue) == 1:
-            p_data = self.publish_queue[0]['run_data']
+            p_data = self.publish_queue['run_data']
             p_name = p_data.get('name', 'Unknown')
             p_ver = p_data.get('version', '0.0.0')
             commit_msg = f"feat(plugin): Publish {p_name} v{p_ver}"
@@ -584,7 +584,7 @@ class PublishDialog(QDialog):
 
         self._add_log(f"Packaging '{plugin_id}' to zip from "
                       f"'{plugin_source_path}'...")
-        shutil.make_archive(os.path.splitext(final_zip_path)[0], 'zip',
+        shutil.make_archive(os.path.splitext(final_zip_path), 'zip',
                             plugin_source_path)
 
     def _update_index_data(self, plugin_data, index_data):

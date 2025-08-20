@@ -1,9 +1,0 @@
-{
-    "id": "ai_patcher",
-    "name": "AI Patcher",
-    "author": "PuffinPy Team",
-    "version": "2.0.0",
-    "description": "A multi-step tool to generate prompts, parse AI responses, and visually review and apply code changes to the project.",
-    "entry_point": "plugin_main.py",
-    "dependencies": {}
-}

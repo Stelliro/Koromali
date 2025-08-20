@@ -1,4 +1,4 @@
-# PuffinPyEditor/app_core/project_manager.py
+# Koromali/app_core/project_manager.py
 import os
 import datetime
 import zipfile
@@ -7,9 +7,9 @@ from typing import List, Tuple, Optional, Dict
 
 from PyQt6.QtCore import QObject, pyqtSignal
 
-from .settings_manager import settings_manager
+from .settings_manager import SettingsManager
 from utils.logger import log
-from utils.helpers import clean_git_conflict_markers # Import the moved function
+from utils.helpers import clean_git_conflict_markers
 
 
 class ProjectManager(QObject):
@@ -17,181 +17,90 @@ class ProjectManager(QObject):
 
     projects_changed = pyqtSignal()
 
-    def __init__(self):
+    def __init__(self, settings_manager: SettingsManager):
         super().__init__()
+        self.settings = settings_manager
         self._open_projects: List[str] = []
         self._active_project_path: Optional[str] = None
         self._load_session()
-        log.info(
-            f"ProjectManager initialized with {len(self._open_projects)} "
-            "projects."
-        )
+        log.info(f"ProjectManager initialized.")
 
     def _load_session(self):
         """Loads the list of open projects from the settings."""
-        open_projects = settings_manager.get("open_projects", [])
-        active_project = settings_manager.get("active_project_path")
-
-        # Ensure all stored project paths are valid directories
-        self._open_projects = [
-            os.path.normpath(p) for p in open_projects if os.path.isdir(p)
-        ]
-
-        if (active_project and
-                os.path.normpath(active_project) in self._open_projects):
+        open_projects = self.settings.get("open_projects", [])
+        active_project = self.settings.get("active_project_path")
+        self._open_projects = [os.path.normpath(p) for p in open_projects if os.path.isdir(p)]
+        if (active_project and os.path.normpath(active_project) in self._open_projects):
             self._active_project_path = os.path.normpath(active_project)
         elif self._open_projects:
             self._active_project_path = self._open_projects[0]
         else:
             self._active_project_path = None
-        log.info(
-            "Loaded project session. Active project: "
-            f"{self._active_project_path}"
-        )
+        log.info(f"Loaded project session. Active project: {self._active_project_path}")
 
     def save_session(self):
         """Saves the current list of open projects to the settings."""
-        settings_manager.set("open_projects", self._open_projects, False)
-        settings_manager.set(
-            "active_project_path", self._active_project_path, False
-        )
+        self.settings.set("open_projects", self._open_projects, False)
+        self.settings.set("active_project_path", self._active_project_path, False)
         log.info("Project session saved.")
 
     def open_project(self, path: str) -> bool:
-        """Adds a project to the list of open projects and sets it as active."""
-        if not os.path.isdir(path):
-            log.error(f"Cannot open project. Path is not a directory: {path}")
-            return False
-
+        if not os.path.isdir(path): return False
         norm_path = os.path.normpath(path)
         if norm_path not in self._open_projects:
             self._open_projects.append(norm_path)
-            log.info(f"Project opened: {norm_path}")
             self.projects_changed.emit()
         self.set_active_project(norm_path)
         return True
 
     def close_project(self, path: str):
-        """Closes a project and updates the active project if necessary."""
         norm_path = os.path.normpath(path)
         if norm_path in self._open_projects:
             was_active = (self.get_active_project_path() == norm_path)
-            
             self._open_projects.remove(norm_path)
-            log.info(f"Project closed: {norm_path}")
-
-            # If the closed project was the active one, pick a new active one
             if was_active:
-                new_active_path = self._open_projects[0] if self._open_projects else None
-                # Directly set the internal variable. We will emit the signal once at the end.
-                if self._active_project_path != new_active_path:
-                    self._active_project_path = new_active_path
-                    log.info(f"Active project changed to: {new_active_path}")
-            
-            self.save_session()
-            # A single, definitive signal emission to trigger the UI refresh.
-            self.projects_changed.emit()
-
-    def move_project(self, path_to_move: str, direction: str):
-        """Moves a project up or down in the list."""
-        norm_path = os.path.normpath(path_to_move)
-        if norm_path not in self._open_projects:
-            return
-
-        idx = self._open_projects.index(norm_path)
-        if direction == 'up' and idx > 0:
-            self._open_projects.insert(idx - 1, self._open_projects.pop(idx))
-            self.save_session()
-            self.projects_changed.emit()
-        elif direction == 'down' and idx < len(self._open_projects) - 1:
-            self._open_projects.insert(idx + 1, self._open_projects.pop(idx))
+                new_active = self._open_projects[0] if self._open_projects else None
+                if self._active_project_path != new_active:
+                    self._active_project_path = new_active
             self.save_session()
             self.projects_changed.emit()
 
-    def move_project_to_end(self, path_to_move: str, to_top: bool):
-        """Moves a project to the top or bottom of the list."""
-        norm_path = os.path.normpath(path_to_move)
-        if norm_path not in self._open_projects:
-            return
-
-        item = self._open_projects.pop(self._open_projects.index(norm_path))
-        if to_top:
-            self._open_projects.insert(0, item)
-        else:
-            self._open_projects.append(item)
-
+    def reorder_projects(self, new_order: List[str]):
+        if set(self._open_projects) != set(new_order): return
+        self._open_projects = new_order
         self.save_session()
-        self.projects_changed.emit()
-
+    
     def get_open_projects(self) -> List[str]:
-        """Returns the list of currently open project paths."""
         return self._open_projects
 
     def set_active_project(self, path: Optional[str]):
-        """
-        Sets the currently active project. The project MUST already be in the open list.
-        """
         norm_path = os.path.normpath(path) if path else None
-        
-        # THE FIX: This guard clause prevents a closed project from being
-        # re-activated by a UI signal. A project must be in the open list
-        # to become the active project.
-        if norm_path and norm_path not in self._open_projects:
-            log.warning(
-                f"Attempted to set active project to '{norm_path}', "
-                "but it's not in the open projects list. Ignoring."
-            )
-            return
-
+        if norm_path and norm_path not in self._open_projects: return
         if self._active_project_path != norm_path:
             self._active_project_path = norm_path
-            log.info(f"Active project set to: {norm_path}")
             self.projects_changed.emit()
 
     def get_active_project_path(self) -> Optional[str]:
-        """Returns the path of the currently active project."""
         return self._active_project_path
 
     def is_project_open(self) -> bool:
-        """Checks if any project is currently active."""
         return self._active_project_path is not None
 
     def create_project_zip(self, output_zip_path: str) -> bool:
-        """
-        Creates a zip archive of the active project, ignoring common artifacts.
-
-        Returns:
-            True if the zip was created successfully, False otherwise.
-        """
-        if not self.is_project_open():
-            log.error("Cannot create zip. No active project.")
-            return False
-
+        if not self.is_project_open(): return False
         project_root = self.get_active_project_path()
-        ignore_dirs = {
-            '__pycache__', '.git', 'venv', '.venv', 'dist', 'build', 'logs'
-        }
-        ignore_files = {'.gitignore', 'puffin_editor_settings.json'}
-
+        ignore_dirs = {'__pycache__', '.git', 'venv', '.venv', 'dist', 'build', 'logs'}
+        ignore_files = {'OverlayApp', 'Koromali_editor_settings.json'}
         try:
-            with zipfile.ZipFile(
-                    output_zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            with zipfile.ZipFile(output_zip_path, 'w', zipfile.ZIP_DEFLATED) as z:
                 for root, dirs, files in os.walk(project_root):
                     dirs[:] = [d for d in dirs if d not in ignore_dirs]
                     for file in files:
-                        if file in ignore_files:
-                            continue
-                        file_path = os.path.join(root, file)
-                        arcname = os.path.relpath(file_path, project_root)
-                        zipf.write(file_path, arcname)
-            log.info(
-                f"Successfully created project archive at {output_zip_path}"
-            )
+                        if file in ignore_files: continue
+                        z.write(os.path.join(root, file), os.path.relpath(os.path.join(root, file), project_root))
             return True
-        except (IOError, OSError, zipfile.BadZipFile) as e:
-            log.error(f"Failed to create project zip: {e}", exc_info=True)
+        except (IOError, OSError, zipfile.BadZipFile):
             return False
-
     def generate_file_tree_from_list(
             self, project_root: str, file_list: List[str]
     ) -> List[str]:
@@ -292,7 +201,6 @@ class ProjectManager(QObject):
             try:
                 with open(filepath, 'r', encoding='utf-8') as f:
                     original_content = f.read()
-                    # Use the refactored utility function
                     cleaned_content = clean_git_conflict_markers(original_content)
                     if original_content != cleaned_content:
                         log.info(f"Cleaned git conflict markers from {filepath} for export.")

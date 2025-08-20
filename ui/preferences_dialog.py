@@ -1,4 +1,4 @@
-# PuffinPyEditor/ui/preferences_dialog.py
+# Koromali/ui/preferences_dialog.py
 import uuid
 import sys
 import os
@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QTabWidget,
 from PyQt6.QtGui import QFont, QDesktopServices, QColor
 from PyQt6.QtCore import Qt, QSize, pyqtSignal, QUrl
 
+from app_core.config import APP_NAME
 from utils.logger import log
 
 if sys.platform == "win32":
@@ -26,14 +27,15 @@ if sys.platform == "win32":
 
 import qtawesome as qta
 from utils.helpers import get_startup_shortcut_path
-from app_core.settings_manager import settings_manager
-from app_core.github_manager import GitHubManager
-from app_core.source_control_manager import SourceControlManager
-from app_core.plugin_manager import PluginManager, Plugin
-from app_core.puffin_api import PuffinPluginAPI
+from app_core.plugin_manager import Plugin
 
 if TYPE_CHECKING:
     from app_core.theme_manager import ThemeManager
+    from app_core.github_manager import GitHubManager
+    from app_core.source_control_manager import SourceControlManager
+    from app_core.plugin_manager import PluginManager
+    from app_core.koromali_api import KoromaliPluginAPI
+    from app_core.settings_manager import SettingsManager
 
 
 class AuthDialog(QDialog):
@@ -42,7 +44,7 @@ class AuthDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("GitHub Device Authorization")
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("Please authorize PuffinPyEditor in your browser."))
+        layout.addWidget(QLabel("Please authorize Koromali in your browser."))
         url_label = QLabel(f"1. Open: <a href='{verification_uri}'>{verification_uri}</a>")
         url_label.setOpenExternalLinks(True)
         layout.addWidget(url_label)
@@ -60,9 +62,9 @@ class PreferencesDialog(QDialog):
     settings_changed_for_editor_refresh = pyqtSignal()
     theme_changed_signal = pyqtSignal(str)
 
-    def __init__(self, theme_manager: 'ThemeManager', git_manager: SourceControlManager,
-                 github_manager: GitHubManager, plugin_manager: PluginManager,
-                 puffin_api: PuffinPluginAPI,
+    def __init__(self, theme_manager: 'ThemeManager', git_manager: 'SourceControlManager',
+                 github_manager: 'GitHubManager', plugin_manager: 'PluginManager',
+                 koromali_api: 'KoromaliPluginAPI', settings_manager: 'SettingsManager',
                  parent: Optional[QWidget] = None):
         super().__init__(parent)
         log.info("PreferencesDialog initializing...")
@@ -72,7 +74,8 @@ class PreferencesDialog(QDialog):
         self.git_manager = git_manager
         self.github_manager = github_manager
         self.plugin_manager = plugin_manager
-        self.puffin_api = puffin_api
+        self.koromali_api = koromali_api
+        self.settings = settings_manager # Use passed-in instance
 
         self.original_settings: dict[str, Any] = {}
         self.original_git_config: dict[str, str] = {}
@@ -140,29 +143,29 @@ class PreferencesDialog(QDialog):
         self.is_loading = False
 
     def _load_settings_into_dialog(self):
-        self.original_settings = settings_manager.settings.copy()
+        self.original_settings = self.settings.settings.copy()
         self._repopulate_theme_combo()
-        self.font_family_combo.setCurrentFont(QFont(settings_manager.get("font_family")))
-        self.font_size_spinbox.setValue(settings_manager.get("font_size"))
-        self.show_line_numbers_checkbox.setChecked(settings_manager.get("show_line_numbers"))
-        self.word_wrap_checkbox.setChecked(settings_manager.get("word_wrap"))
-        self.show_indent_guides_checkbox.setChecked(settings_manager.get("show_indentation_guides"))
-        self.indent_style_combo.setCurrentText(settings_manager.get("indent_style").capitalize())
-        self.indent_width_spinbox.setValue(settings_manager.get("indent_width"))
-        self.auto_save_checkbox.setChecked(settings_manager.get("auto_save_enabled"))
-        self.auto_save_delay_spinbox.setValue(settings_manager.get("auto_save_delay_seconds"))
-        self.max_recent_files_spinbox.setValue(settings_manager.get("max_recent_files"))
-        self.python_path_edit.setText(settings_manager.get("python_interpreter_path", ""))
+        self.font_family_combo.setCurrentFont(QFont(self.settings.get("font_family")))
+        self.font_size_spinbox.setValue(self.settings.get("font_size"))
+        self.show_line_numbers_checkbox.setChecked(self.settings.get("show_line_numbers"))
+        self.word_wrap_checkbox.setChecked(self.settings.get("word_wrap"))
+        self.show_indent_guides_checkbox.setChecked(self.settings.get("show_indentation_guides"))
+        self.indent_style_combo.setCurrentText(self.settings.get("indent_style").capitalize())
+        self.indent_width_spinbox.setValue(self.settings.get("indent_width"))
+        self.auto_save_checkbox.setChecked(self.settings.get("auto_save_enabled"))
+        self.auto_save_delay_spinbox.setValue(self.settings.get("auto_save_delay_seconds"))
+        self.max_recent_files_spinbox.setValue(self.settings.get("max_recent_files"))
+        self.python_path_edit.setText(self.settings.get("python_interpreter_path", ""))
         if sys.platform == "win32":
-            self.nsis_path_edit.setText(settings_manager.get("nsis_path", ""))
-            self.cleanup_build_checkbox.setChecked(settings_manager.get("cleanup_after_build", True))
+            self.nsis_path_edit.setText(self.settings.get("nsis_path", ""))
+            self.cleanup_build_checkbox.setChecked(self.settings.get("cleanup_after_build", True))
             if winshell and hasattr(self, 'run_in_background_checkbox'): self.run_in_background_checkbox.setChecked(
-                settings_manager.get("run_in_background", False))
+                self.settings.get("run_in_background", False))
 
-        self.staged_repos = [r.copy() for r in settings_manager.get("source_control_repos", [])]
-        self.staged_active_repo_id = settings_manager.get("active_update_repo_id")
+        self.staged_repos = [r.copy() for r in self.settings.get("source_control_repos", [])]
+        self.staged_active_repo_id = self.settings.get("active_update_repo_id")
         self._populate_repo_list()
-        self.plugins_repo_edit.setText(settings_manager.get("plugins_distro_repo", "Stelliro/puffin-plugins"))
+        self.plugins_repo_edit.setText(self.settings.get("plugins_distro_repo", "Stelliro/Koromali-plugins"))
 
     def _connect_ui_changed_signals(self):
         for w in self.findChildren((QComboBox, QSpinBox, QCheckBox, QFontComboBox, QLineEdit)):
@@ -218,11 +221,11 @@ class PreferencesDialog(QDialog):
 
         self._save_repo_form_to_staged()
 
-        for k, v in ss.items(): settings_manager.set(k, v, False)
-        settings_manager.save()
+        for k, v in ss.items(): self.settings.set(k, v, False)
+        self.settings.save()
         self.theme_changed_signal.emit(self.theme_combo.currentData())
         self.settings_changed_for_editor_refresh.emit()
-        self.original_settings = settings_manager.settings.copy()
+        self.original_settings = self.settings.settings.copy()
         ab.setEnabled(False)
         if self.restart_needed: QMessageBox.information(self, "Restart Required", "Some changes require a restart.")
         self.restart_needed = False
@@ -267,7 +270,7 @@ class PreferencesDialog(QDialog):
         self.tab_widget.addTab(tab, qta.icon('fa5s.palette'), "Appearance")
 
     def _repopulate_theme_combo(self):
-        current_id = self.original_settings.get("last_theme_id", "puffin_dark")
+        current_id = self.original_settings.get("last_theme_id", "Koromali_dark")
         self.theme_combo.blockSignals(True)
         self.theme_combo.clear()
         for theme_id, name in self.theme_manager.get_available_themes_for_ui().items():
@@ -276,13 +279,13 @@ class PreferencesDialog(QDialog):
         self.theme_combo.blockSignals(False)
 
     def connect_theme_editor_button(self):
-        if self.puffin_api.theme_editor_launcher:
+        if self.koromali_api.theme_editor_launcher:
             try:
                 self.edit_themes_button.clicked.disconnect()
             except TypeError:
                 pass
-            self.edit_themes_button.clicked.connect(self.puffin_api.theme_editor_launcher)
-            if theme_editor_instance := self.puffin_api.get_plugin_instance('theme_editor'):
+            self.edit_themes_button.clicked.connect(self.koromali_api.theme_editor_launcher)
+            if theme_editor_instance := self.koromali_api.get_plugin_instance('theme_editor'):
                 if dialog := getattr(theme_editor_instance, 'dialog_instance', None):
                     if hasattr(dialog, 'custom_themes_changed'):
                         dialog.custom_themes_changed.connect(self._repopulate_theme_combo)
@@ -368,7 +371,7 @@ class PreferencesDialog(QDialog):
         startup_group = self._create_layout_in_groupbox("System Startup", layout)
         if sys.platform == "win32" and winshell:
             self.run_in_background_checkbox = QCheckBox(
-                "Launch PuffinPyEditor on system startup (runs in system tray)")
+                f"Launch {APP_NAME} on system startup (runs in system tray)")
             self.run_in_background_checkbox.setToolTip(
                 "Creates a shortcut in the Windows Startup folder.")
             startup_group.addRow(
@@ -378,17 +381,26 @@ class PreferencesDialog(QDialog):
         layout.addStretch()
         self.tab_widget.addTab(tab, qta.icon('fa5s.desktop'), "System")
 
-    def _manage_startup_shortcut(self, create):
+    def _manage_startup_shortcut(self, create: bool):
         if not winshell: return
         shortcut_path = get_startup_shortcut_path()
         if not shortcut_path: return
         try:
             if create and not os.path.exists(shortcut_path):
-                tray_exe_path = os.path.join(os.path.dirname(sys.executable), "PuffinPyTray.exe")
-                if not os.path.exists(tray_exe_path): raise FileNotFoundError("PuffinPyTray.exe not found.")
+                tray_exe_name = f"{APP_NAME}Tray.exe"
+                tray_exe_path = os.path.join(os.path.dirname(sys.executable), tray_exe_name)
+                if not os.path.exists(tray_exe_path):
+                    dev_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', tray_exe_name))
+                    if os.path.exists(dev_path):
+                        tray_exe_path = dev_path
+                    else:
+                        raise FileNotFoundError(f"{tray_exe_name} not found.")
+                
                 winshell.CreateShortcut(Path=shortcut_path, Target=tray_exe_path)
+                log.info(f"Created startup shortcut for '{tray_exe_path}'.")
             elif not create and os.path.exists(shortcut_path):
                 os.remove(shortcut_path)
+                log.info("Removed startup shortcut.")
         except Exception as e:
             QMessageBox.critical(self, "Shortcut Error", f"Could not manage startup shortcut:\n{e}")
 
@@ -779,40 +791,29 @@ class PreferencesDialog(QDialog):
             self._install_plugin_from_url(item.data(Qt.ItemDataRole.UserRole).get('download_url'))
 
     def _install_plugin_from_url(self, url):
-        # The QInputDialog will be pre-filled with the 'url' if it's provided.
-        # The user can just confirm by clicking OK, or enter a new URL.
         url, ok = QInputDialog.getText(self, "Install from URL", "Plugin ZIP URL:", text=url)
 
-        # If the user cancels or the URL is empty, we stop.
         if not (url and ok):
             return
 
         with tempfile.TemporaryDirectory() as temp_dir:
             try:
-                # Perform the web request
                 r = requests.get(url)
-                # This will raise an exception for bad status codes (like 404, 500)
                 r.raise_for_status()
 
-                # Save the downloaded content to a temporary zip file
                 zip_path = os.path.join(temp_dir, "plugin.zip")
                 with open(zip_path, 'wb') as f:
                     f.write(r.content)
 
-                # Ask the plugin manager to install from the zip
                 ok, msg = self.plugin_manager.install_plugin_from_zip(zip_path)
 
-                # Show the result to the user
                 (QMessageBox.information if ok else QMessageBox.warning)(self, "Plugin Install", msg)
 
-                # If installation was successful, mark that a restart is needed
-                # and refresh the list of installed plugins.
                 if ok:
                     self.restart_needed = True
                     self._populate_all_plugin_lists()
 
             except Exception as e:
-                # Catch any errors during download or installation
                 QMessageBox.critical(self, "Download Error", f"Failed to download or install plugin: {e}")
 
     def _install_plugin_from_file(self):

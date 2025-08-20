@@ -1,4 +1,4 @@
-# PuffinPyEditor/plugins/github_tools/plugin_main.py
+# Koromali/plugins/github_tools/plugin_main.py
 import os
 import shutil
 import tempfile
@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (QInputDialog, QMessageBox, QTextEdit, QDialog,
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 
-from app_core.puffin_api import PuffinPluginAPI
+from app_core.koromali_api import KoromaliPluginAPI
 from .new_release_dialog import NewReleaseDialog
 from .select_repo_dialog import SelectRepoDialog
 from .github_dialog import GitHubDialog
@@ -69,8 +69,8 @@ class UploadProgressDialog(QDialog):
 
 
 class GitHubToolsPlugin:
-    def __init__(self, puffin_api: PuffinPluginAPI):
-        self.api = puffin_api
+    def __init__(self, koromali_api: KoromaliPluginAPI):
+        self.api = koromali_api
         self.main_window = self.api.get_main_window()
         self.project_manager = self.api.get_manager("project")
         self.git_manager = self.api.get_manager("git")
@@ -381,12 +381,13 @@ class GitHubToolsPlugin:
     def _show_github_dialog(self):
         if not self.github_dialog:
             self.github_dialog = GitHubDialog(self.github_manager, self.git_manager, self.main_window)
-            self.github_manager.project_cloned.connect(self.project_manager.open_project)
+            # Correctly connect the dialog's signal, not the manager's non-existent one
+            self.github_dialog.project_cloned.connect(self.project_manager.open_project)
         self.github_dialog.show()
 
 
-def initialize(puffin_api: PuffinPluginAPI):
-    plugin = GitHubToolsPlugin(puffin_api)
-    puffin_api.add_menu_action("tools", "GitHub Repositories...", plugin._show_github_dialog, icon_name="fa5b.github")
-    puffin_api.add_menu_action("tools", "New Release...", plugin.show_create_release_dialog, icon_name="fa5s.tag")
+def initialize(koromali_api: KoromaliPluginAPI):
+    plugin = GitHubToolsPlugin(koromali_api)
+    koromali_api.add_menu_action("tools", "GitHub Repositories...", plugin._show_github_dialog, icon_name="fa5b.github")
+    koromali_api.add_menu_action("tools", "New Release...", plugin.show_create_release_dialog, icon_name="fa5s.tag")
     return plugin

@@ -1,0 +1,6 @@
+[Server]
+# Un-comment the line below and change the port number to run the server
+# on a port other than the default of 8080. This is useful for testing
+# a second host on the same computer.
+#
+# port = 8081

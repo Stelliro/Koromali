@@ -1,4 +1,4 @@
-# PuffinPyEditor/app_core/highlighters/json_syntax_highlighter.py
+# Koromali/app_core/highlighters/json_syntax_highlighter.py
 from typing import TYPE_CHECKING
 from PyQt6.QtGui import QSyntaxHighlighter, QTextCharFormat, QColor, QFont
 from PyQt6.QtCore import QRegularExpression
@@ -24,24 +24,19 @@ class JsonSyntaxHighlighter(QSyntaxHighlighter):
         def get_color(key: str, fallback: str) -> QColor:
             return QColor(colors.get(f"syntax.{key}", fallback))
 
-        # Format for keys (strings before a colon)
         key_format = QTextCharFormat()
         key_format.setForeground(get_color("className", "#dbbc7f"))
 
-        # Format for string values
         string_format = QTextCharFormat()
         string_format.setForeground(get_color("string", "#a7c080"))
 
-        # Format for numbers
         number_format = QTextCharFormat()
         number_format.setForeground(get_color("number", "#d699b6"))
 
-        # Format for keywords (true, false, null)
         keyword_format = QTextCharFormat()
         keyword_format.setForeground(get_color("keyword", "#e67e80"))
         keyword_format.setFontWeight(QFont.Weight.Bold)
 
-        # Format for operators/braces
         brace_format = QTextCharFormat()
         brace_format.setForeground(get_color("brace", "#d3c6aa"))
 
@@ -49,8 +44,11 @@ class JsonSyntaxHighlighter(QSyntaxHighlighter):
             (QRegularExpression(r'[\{\}\[\]]'), brace_format),
             (QRegularExpression(r'\b(true|false|null)\b'), keyword_format),
             (QRegularExpression(r'\b-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?\b'), number_format),
-            (QRegularExpression(r'"[^"\\]*(\\.[^"\\]*)*"'), string_format),
+
+            # The more specific rule (key) now comes BEFORE the generic rule (string).
+            # This correctly identifies strings followed by a colon as keys.
             (QRegularExpression(r'"[^"\\]*(\\.[^"\\]*)*"(?=\s*:)'), key_format),
+            (QRegularExpression(r'"[^"\\]*(\\.[^"\\]*)*"'), string_format),
         ]
 
     def highlightBlock(self, text: str):
@@ -62,6 +60,6 @@ class JsonSyntaxHighlighter(QSyntaxHighlighter):
                 self.setFormat(match.capturedStart(), match.capturedLength(), fmt)
 
     def rehighlight(self):
-        """Forces a re-highlight of the entire document on theme change."""
+        """Re-initializes formats and rules, called when the theme changes."""
         self.initialize_formats_and_rules()
         super().rehighlight()

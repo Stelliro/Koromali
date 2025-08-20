@@ -2,7 +2,7 @@
 import os
 from .markdown_editor_widget import MarkdownEditorWidget
 from utils.logger import log
-from app_core.puffin_api import PuffinPluginAPI
+from app_core.koromali_api import KoromaliPluginAPI
 
 
 class MarkdownPlugin:
@@ -11,58 +11,46 @@ class MarkdownPlugin:
     Provides a dual-pane editor with live preview for Markdown files.
     """
 
-    def __init__(self, puffin_api: PuffinPluginAPI):
-        self.api = puffin_api
-        self.main_window = self.api.get_main_window()
-        self.instances = {}  # Track open editor instances
+    def __init__(self, koromali_api: KoromaliPluginAPI):
+        self.api = koromali_api
 
         # Register our custom editor widget as the handler for .md files
+        # The handler is expected to return a widget instance for the main window to manage.
         self.api.register_file_opener('.md', self.open_markdown_editor)
         log.info("Markdown Editor: Registered dual-pane handler for .md files.")
 
-    def open_markdown_editor(self, filepath: str):
+    def open_markdown_editor(self, filepath: str, content: str) -> MarkdownEditorWidget:
         """
-        Callback to open a .md file in our custom MarkdownEditorWidget.
-        It creates a new tab with the dual-pane editor or focuses an existing one.
+        Callback to create and return our custom MarkdownEditorWidget.
+
+        The MainWindow will be responsible for adding it to the tab widget. This
+        method accepts pre-read content to avoid redundant file I/O.
         """
-        if filepath in self.instances:
-            widget = self.instances[filepath]
-            if widget:
-                index = self.main_window.tab_widget.indexOf(widget)
-                if index != -1:
-                    self.main_window.tab_widget.setCurrentIndex(index)
-                    return
-
-        if self.main_window.tab_widget.count() == 1:
-            if current_widget := self.main_window.tab_widget.widget(0):
-                if current_widget.objectName() == "PlaceholderLabel":
-                    self.main_window.tab_widget.removeTab(0)
-
         log.info(f"Markdown Editor: Creating new dual-pane view for '{filepath}'.")
 
-        # THE FIX: We pass the theme_manager to the widget's constructor.
+        # Create the widget with the main window as its parent
         editor = MarkdownEditorWidget(
-            puffin_api=self.api,
-            theme_manager=self.api.get_manager("theme"),
-            parent=self.main_window
+            koromali_api=self.api,
+            parent=self.api.get_main_window()
         )
-        editor.load_file(filepath)
-        editor.content_changed.connect(lambda: self.main_window._on_content_changed(editor))
 
-        tab_name = os.path.basename(filepath)
-        index = self.main_window.tab_widget.addTab(editor, tab_name)
-        self.main_window.tab_widget.setTabToolTip(index, filepath)
-        self.main_window.tab_widget.setCurrentIndex(index)
-        self.main_window.tab_widget.setTabsClosable(True)
+        # Use a new method to set the content directly
+        editor.set_initial_content(filepath, content)
 
-        self.instances[filepath] = editor
-        editor.destroyed.connect(lambda: self.instances.pop(filepath, None))
+        # Connect its changed signal to the main window's handler
+        editor.content_changed.connect(
+            lambda: self.api.get_main_window()._on_content_changed(editor)
+        )
+
+        return editor
 
 
-def initialize(puffin_api: PuffinPluginAPI):
-    """Entry point for PuffinPyEditor to load the plugin."""
+def initialize(koromali_api: KoromaliPluginAPI):
+    """
+    Entry point for Koromali to load the plugin.
+    """
     try:
-        plugin_instance = MarkdownPlugin(puffin_api)
+        plugin_instance = MarkdownPlugin(koromali_api)
         log.info("Markdown Editor Plugin (dual-pane) initialized successfully.")
         return plugin_instance
     except Exception as e:

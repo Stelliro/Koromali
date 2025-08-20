@@ -1,4 +1,4 @@
-# PuffinPyEditor/utils/log_viewer.py
+# Koromali/utils/log_viewer.py
 import sys
 import os
 import re
@@ -29,7 +29,7 @@ class LogViewerWindow(QMainWindow):
         self.project_root = self._get_project_root()
 
         self.setWindowTitle(
-            f"PuffinPy Log Viewer - {os.path.basename(log_file_path)}"
+            f"Koromali Log Viewer - {os.path.basename(log_file_path)}"
         )
         self.setMinimumSize(800, 500)
         self.setStyleSheet("background-color: #2D2A2E;")
@@ -222,7 +222,7 @@ class LogViewerWindow(QMainWindow):
             if os.path.exists(file_path):
                 files_to_include.add(os.path.normpath(file_path))
 
-        sugg_path = os.path.join(os.path.expanduser("~"), "puffin_debug_export.md")
+        sugg_path = os.path.join(os.path.expanduser("~"), "Koromali_debug_export.md")
         filepath, _ = QFileDialog.getSaveFileName(
             self, "Save Debug Export", sugg_path, "Markdown Files (*.md)"
         )
@@ -230,7 +230,7 @@ class LogViewerWindow(QMainWindow):
             return
 
         export_content = [
-            "# PuffinPyEditor Debugging Export", "## AI Instructions",
+            "# Koromali Debugging Export", "## AI Instructions",
             "Analyze the following log output and the associated source code "
             "files to identify the root cause of the error. Provide a "
             "detailed explanation and a suggested fix.", "---",

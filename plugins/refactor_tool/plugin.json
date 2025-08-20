@@ -1,8 +1,8 @@
 {
     "id": "refactor_tool",
     "name": "Refactor Tool",
-    "author": "PuffinPy AI",
-    "version": "1.0.0",
-    "description": "Provides context-aware renaming for variables, functions, and classes across files.",
+    "author": "Koromali AI",
+    "version": "2.1.0",
+    "description": "Provides project-wide refactoring, including find/replace and automated refactoring on file renames.",
     "entry_point": "plugin_main.py"
 }

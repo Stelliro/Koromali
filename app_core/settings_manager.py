@@ -1,118 +1,108 @@
-# PuffinPyEditor/app_core/settings_manager.py
+# Koromali/app_core/settings_manager.py
 import json
 import os
 from typing import Any, Dict
 from utils.logger import log, get_app_data_path
 
-# Use the same application data path for the settings file to ensure it's
-# in a user-writable location, especially after installation.
 APP_DATA_ROOT = get_app_data_path()
-SETTINGS_FILE = os.path.join(APP_DATA_ROOT, "puffin_editor_settings.json")
+SETTINGS_FILE = os.path.join(APP_DATA_ROOT, "Koromali_editor_settings.json")
+CREDENTIALS_FILE = os.path.join(APP_DATA_ROOT, "credentials.json")
 
 DEFAULT_SETTINGS = {
-    # --- Window & Layout ---
-    "window_size": [1600, 1000],
-    "window_position": None,
-    "splitter_sizes": [300, 1300],
-
-    # --- Editor & Appearance ---
-    "last_theme_id": "puffin_dark",
-    "font_family": "Consolas",
-    "font_size": 11,
-    "show_line_numbers": True,
-    "show_indentation_guides": True,
-    "word_wrap": False,
-    "indent_style": "spaces",  # "spaces" or "tabs"
-    "indent_width": 4,
-
-    # --- File Handling ---
-    "auto_save_enabled": False,
-    "auto_save_delay_seconds": 3,
-    "max_recent_files": 15,
-    "favorites": [],
-    "open_files": [],
-
-    # --- Project State ---
-    "open_projects": [],
-    "active_project_path": None,
-    "explorer_expanded_paths": [],
-
-    # --- Integrations & Run ---
-    "python_interpreter_path": "",
-    "github_access_token": None,
-    "github_user": None,
-    "source_control_repos": [],
-    "active_update_repo_id": None,
-    "plugins_distro_repo": "Stelliro/puffin-plugins",
-    "commit_message_history": [],  # NEW: For storing commit history
-    "max_commit_history": 50,      # NEW: To limit the history size
-    "ai_export_loadouts": {},
-    "ai_export_golden_rules": {},  # MODIFIED: Start with an empty dictionary
-    "cleanup_after_build": True,
-    "nsis_path": ""
+    "window_size": [1600, 1000], "window_position": None, "splitter_sizes": [300, 1300],
+    "last_theme_id": "Koromali_dark", "font_family": "Consolas", "font_size": 11,
+    "show_line_numbers": True, "show_indentation_guides": True, "word_wrap": False,
+    "indent_style": "spaces", "indent_width": 4, "auto_save_enabled": False,
+    "auto_save_delay_seconds": 3, "max_recent_files": 15, "favorites": [],
+    "open_files": [], "open_projects": [], "active_project_path": None, "project_sessions": {},
+    "explorer_expanded_paths": [], "project_customizations": {},
+    "explorer_show_hidden_files": False,
+    "python_interpreter_path": "", "source_control_repos": [],
+    "active_update_repo_id": None, "plugins_distro_repo": "Stelliro/Koromali-plugins",
+    "commit_message_history": [], "max_commit_history": 50, "ai_export_loadouts": {},
+    "ai_export_golden_rules": {}, "cleanup_after_build": True, "nsis_path": "",
+    "ai_tools_api_mode_enabled": False, "ai_tools_include_linter": True,
+    "ai_studio_use_persona": True, "ai_studio_include_patcher_rules": True,
+    "ai_studio_selections": {}
+}
+DEFAULT_CREDENTIALS = {
+    "github_access_token": None, "github_user": None, "github_user_info": None, "api_keys": {}
 }
 
-
 class SettingsManager:
-    """Handles loading, accessing, and saving application settings."""
-
-    def __init__(self, settings_file: str = SETTINGS_FILE):
+    def __init__(self, settings_file: str = SETTINGS_FILE, credentials_file: str = CREDENTIALS_FILE):
         self.settings_file = settings_file
-        self.settings = self._load_settings()
+        self.credentials_file = credentials_file
+        self.settings = self._load_json_with_defaults(self.settings_file, DEFAULT_SETTINGS)
+        self.credentials = self._load_json_with_defaults(self.credentials_file, DEFAULT_CREDENTIALS)
+        self._migrate_old_credentials()
 
-    def _load_settings(self) -> Dict[str, Any]:
-        """Loads settings from the JSON file, merging with defaults."""
+    def _load_json_with_defaults(self, filepath: str, defaults: Dict) -> Dict:
         try:
-            if os.path.exists(self.settings_file):
-                with open(self.settings_file, 'r', encoding='utf-8') as f:
-                    loaded_settings = json.load(f)
-
-                if "github_pat" in loaded_settings:
-                    if "github_access_token" not in loaded_settings:
-                        loaded_settings["github_access_token"] = \
-                            loaded_settings.pop("github_pat")
-                    else:
-                        del loaded_settings["github_pat"]
-                    log.info("Migrated old 'github_pat' setting.")
-
-                settings = DEFAULT_SETTINGS.copy()
-                settings.update(loaded_settings)
-                return settings
+            if os.path.exists(filepath):
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    loaded_data = json.load(f)
+                final_data = defaults.copy(); final_data.update(loaded_data)
+                return final_data
             else:
-                log.info(
-                    f"Settings file not found. Creating with defaults "
-                    f"at: {self.settings_file}"
-                )
-                self._save_settings(DEFAULT_SETTINGS.copy())
-                return DEFAULT_SETTINGS.copy()
+                log.info(f"File not found. Creating with defaults at: {filepath}")
+                self._save_json(filepath, defaults.copy()); return defaults.copy()
         except (json.JSONDecodeError, IOError) as e:
-            log.error(f"Error loading settings: {e}. Reverting to defaults.",
-                      exc_info=True)
-            return DEFAULT_SETTINGS.copy()
+            log.error(f"Error loading {filepath}: {e}. Reverting to defaults.", exc_info=True)
+            return defaults.copy()
 
-    def _save_settings(self, settings_data: Dict[str, Any]):
-        """Saves the provided settings data to the JSON file atomically."""
+    def _save_json(self, filepath: str, data: Dict):
         try:
-            os.makedirs(os.path.dirname(self.settings_file), exist_ok=True)
-            temp_file = self.settings_file + ".tmp"
+            os.makedirs(os.path.dirname(filepath), exist_ok=True)
+            temp_file = filepath + ".tmp"
             with open(temp_file, 'w', encoding='utf-8') as f:
-                json.dump(settings_data, f, indent=4)
-            os.replace(temp_file, self.settings_file)
+                json.dump(data, f, indent=4)
+            os.replace(temp_file, filepath)
         except IOError as e:
-            log.error(f"Error saving settings to {self.settings_file}: {e}",
-                      exc_info=True)
+            log.error(f"Error saving to {filepath}: {e}", exc_info=True)
+    
+    def _migrate_old_credentials(self):
+        migrated = False
+        credential_keys = ["github_access_token", "github_user", "github_user_info", "api_keys"]
+        for key in credential_keys:
+            if key in self.settings:
+                self.credentials[key] = self.settings.pop(key); migrated = True
+        if migrated: 
+            log.info("Migrated credentials from main settings file to separate credentials.json.")
+            self.save()
 
     def get(self, key: str, default: Any = None) -> Any:
+        if key in self.credentials: return self.credentials.get(key, default)
         return self.settings.get(key, DEFAULT_SETTINGS.get(key, default))
 
     def set(self, key: str, value: Any, save_immediately: bool = True):
-        self.settings[key] = value
-        if save_immediately:
-            self.save()
+        if key in DEFAULT_CREDENTIALS: self.credentials[key] = value
+        else: self.settings[key] = value
+        if save_immediately: self.save()
 
     def save(self):
-        """Saves the current settings to the disk."""
-        self._save_settings(self.settings)
+        self._save_json(self.settings_file, self.settings)
+        self._save_json(self.credentials_file, self.credentials)
 
-
-settings_manager = SettingsManager()
+    def clear_cached_data(self):
+        """Resets settings that cache user session data, but preserves core configuration."""
+        keys_to_clear = [
+            "open_files",
+            "open_projects",
+            "active_project_path",
+            "project_sessions",
+            "explorer_expanded_paths",
+            "project_customizations",
+            "commit_message_history",
+            "ai_export_loadouts",
+            "ai_studio_selections",
+            "recent_files"
+        ]
+        
+        log.warning("Clearing cached user data from settings file.")
+        for key in keys_to_clear:
+            if key in self.settings:
+                # Reset to default value from DEFAULT_SETTINGS
+                self.settings[key] = DEFAULT_SETTINGS.get(key)
+        
+        self.save()

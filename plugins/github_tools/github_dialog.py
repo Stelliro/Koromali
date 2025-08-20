@@ -1,4 +1,4 @@
-# PuffinPyEditor/plugins/github_tools/github_dialog.py
+# Koromali/plugins/github_tools/github_dialog.py
 import os
 from typing import Optional, List, Dict, Any
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QWidget,

@@ -1,4 +1,4 @@
-# PuffinPyEditor/app_core/highlighters/python_syntax_highlighter.py
+# Koromali/app_core/highlighters/python_syntax_highlighter.py
 from typing import Dict, List, Tuple, TYPE_CHECKING
 from PyQt6.QtGui import QSyntaxHighlighter, QTextCharFormat, QColor, QFont
 from PyQt6.QtCore import QRegularExpression
@@ -19,7 +19,6 @@ class PythonSyntaxHighlighter(QSyntaxHighlighter):
         self.theme_manager = theme_manager
         self.highlighting_rules: List[Tuple[QRegularExpression, QTextCharFormat]] = []
         self.multiline_string_format = QTextCharFormat()
-
         self.initialize_formats_and_rules()
         log.info("PythonSyntaxHighlighter initialized from app_core.")
 
@@ -57,9 +56,7 @@ class PythonSyntaxHighlighter(QSyntaxHighlighter):
         formats["className"].setFontWeight(QFont.Weight.Bold)
 
         formats["functionName"] = QTextCharFormat()
-        formats["functionName"].setForeground(
-            get_color("functionName", "#83c092")
-        )
+        formats["functionName"].setForeground(get_color("functionName", "#83c092"))
 
         formats["comment"] = QTextCharFormat()
         formats["comment"].setForeground(get_color("comment", "#5f6c6d"))
@@ -77,7 +74,6 @@ class PythonSyntaxHighlighter(QSyntaxHighlighter):
         formats["number"].setForeground(get_color("number", "#d699b6"))
 
         self.highlighting_rules = []
-
         keywords = [
             r'\bdef\b', r'\bclass\b', r'\bif\b', r'\belif\b', r'\belse\b',
             r'\bfor\b', r'\bwhile\b', r'\breturn\b', r'\byield\b', r'\bpass\b',
@@ -88,16 +84,13 @@ class PythonSyntaxHighlighter(QSyntaxHighlighter):
             r'\bor\b', r'\band\b', r'\bTrue\b', r'\bFalse\b', r'\bNone\b',
             r'\basync\b', r'\bawait\b'
         ]
-        self.highlighting_rules += [
-            (QRegularExpression(p), formats["keyword"]) for p in keywords
-        ]
+        self.highlighting_rules += [(QRegularExpression(p), formats["keyword"]) for p in keywords]
 
         self.highlighting_rules.extend([
             (QRegularExpression(r'\bself\b'), formats["self"]),
             (QRegularExpression(r'@[A-Za-z0-9_]+'), formats["decorator"]),
             (QRegularExpression(r'\b[A-Z][A-Za-z0-9_]*'), formats["className"]),
-            (QRegularExpression(r'\b[a-z_][A-Za-z0-9_]*(?=\()'),
-             formats["functionName"]),
+            (QRegularExpression(r'\b[a-z_][A-Za-z0-9_]*(?=\()'), formats["functionName"]),
             (QRegularExpression(r'[+\-*/%=<>!&|^~]'), formats["operator"]),
             (QRegularExpression(r'[{}()\[\]]'), formats["brace"]),
             (QRegularExpression(r'\b[0-9]+\b'), formats["number"]),
@@ -105,92 +98,62 @@ class PythonSyntaxHighlighter(QSyntaxHighlighter):
             (QRegularExpression(r"'[^'\\]*(\\.[^'\\]*)*'"), formats["string"]),
             (QRegularExpression(r'#.*'), formats["comment"]),
         ])
-
         self.tri_single_quote_start = QRegularExpression(r"'''")
         self.tri_double_quote_start = QRegularExpression(r'"""')
 
     def highlightBlock(self, text: str):
-        # 1. Apply all single-line rules
         for pattern, fmt in self.highlighting_rules:
             iterator = pattern.globalMatch(text)
             while iterator.hasNext():
                 match = iterator.next()
                 self.setFormat(match.capturedStart(), match.capturedLength(), fmt)
 
-        # 2. Handle multi-line strings with explicit state management
-        # State 0: Normal, State 1: In """, State 2: In '''
-        NORMAL_STATE = 0
-        IN_TRIPLE_DOUBLE = 1
-        IN_TRIPLE_SINGLE = 2
-
+        NORMAL_STATE, IN_TRIPLE_DOUBLE, IN_TRIPLE_SINGLE = 0, 1, 2
         self.setCurrentBlockState(NORMAL_STATE)
-
-        start_index = 0
+        start_indexx = 0
         previous_state = self.previousBlockState()
 
         if previous_state == IN_TRIPLE_DOUBLE:
             delimiter = self.tri_double_quote_start
             end_match = delimiter.match(text, 0)
             if end_match.hasMatch():
-                length = end_match.capturedEnd()
-                self.setFormat(0, length, self.multiline_string_format)
-                start_index = length
+                self.setFormat(0, end_match.capturedEnd(), self.multiline_string_format)
+                start_indexx = end_match.capturedEnd()
             else:
                 self.setCurrentBlockState(IN_TRIPLE_DOUBLE)
                 self.setFormat(0, len(text), self.multiline_string_format)
                 return
-
         elif previous_state == IN_TRIPLE_SINGLE:
             delimiter = self.tri_single_quote_start
             end_match = delimiter.match(text, 0)
             if end_match.hasMatch():
-                length = end_match.capturedEnd()
-                self.setFormat(0, length, self.multiline_string_format)
-                start_index = length
+                self.setFormat(0, end_match.capturedEnd(), self.multiline_string_format)
+                start_indexx = end_match.capturedEnd()
             else:
                 self.setCurrentBlockState(IN_TRIPLE_SINGLE)
                 self.setFormat(0, len(text), self.multiline_string_format)
                 return
 
-        # 3. Find new multi-line strings in the rest of the block
-        delimiters = [
-            (self.tri_double_quote_start, IN_TRIPLE_DOUBLE),
-            (self.tri_single_quote_start, IN_TRIPLE_SINGLE)
-        ]
-
-        while start_index < len(text):
-            # Find the next occurring delimiter of any type with grace and simplicity.
-            next_match, next_state_to_set, next_delimiter_re = None, None, None
+        delimiters = [(self.tri_double_quote_start, IN_TRIPLE_DOUBLE), (self.tri_single_quote_start, IN_TRIPLE_SINGLE)]
+        while start_indexx < len(text):
+            next_match, next_state, next_delimiter = None, None, None
             first_pos = float('inf')
-
-            for delimiter_re, state_to_set in delimiters:
-                match = delimiter_re.match(text, start_index)
+            for delim_re, state in delimiters:
+                match = delim_re.match(text, start_indexx)
                 if match.hasMatch() and match.capturedStart() < first_pos:
-                    first_pos = match.capturedStart()
-                    next_match = match
-                    next_state_to_set = state_to_set
-                    next_delimiter_re = delimiter_re
-
-            if not next_match:
-                break  # No more delimiters found in the remaining text.
-
+                    first_pos, next_match, next_state, next_delimiter = match.capturedStart(), match, state, delim_re
+            if not next_match: break
             start_pos = next_match.capturedStart()
-            # Re-use the found delimiter regex to find its partner
-            end_match = next_delimiter_re.match(text, start_pos + next_match.capturedLength())
-
+            end_match = next_delimiter.match(text, start_pos + next_match.capturedLength())
             if end_match.hasMatch():
-                # A complete story, with a beginning and an end.
                 length = end_match.capturedEnd() - start_pos
                 self.setFormat(start_pos, length, self.multiline_string_format)
-                start_index = end_match.capturedEnd()
+                start_indexx = end_match.capturedEnd()
             else:
-                # A story left unfinished...
-                self.setCurrentBlockState(next_state_to_set)
+                self.setCurrentBlockState(next_state)
                 self.setFormat(start_pos, len(text) - start_pos, self.multiline_string_format)
                 return
 
-    def rehighlight(self):
-        """Forces a re-highlight of the entire document."""
-        log.info("Re-highlighting entire document for Python syntax.")
+    def update_formats(self):
+        """Re-initializes formats and rules, called when the theme changes."""
         self.initialize_formats_and_rules()
-        super().rehighlight()

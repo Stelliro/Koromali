@@ -1,4 +1,4 @@
-# PuffinPyEditor/plugins/github_tools/select_repo_dialog.py
+# Koromali/plugins/github_tools/select_repo_dialog.py
 from typing import Optional, List, Dict, Any
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QListWidget,
                              QListWidgetItem, QDialogButtonBox, QMessageBox,

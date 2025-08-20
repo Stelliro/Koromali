@@ -1,0 +1,11 @@
+{
+    "id": "web_browser",
+    "name": "Private Web Browser",
+    "author": "AI Assistant",
+    "version": "1.0.0",
+    "description": "A lightweight, private web browser integrated into a dockable panel. It does not store history or cookies.",
+    "entry_point": "plugin_main.py",
+    "dependencies": {
+        "PyQt6-WebEngine": ">=6.4.0"
+    }
+}

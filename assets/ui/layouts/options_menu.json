@@ -1,0 +1,26 @@
+{
+    "id": "options_menu",
+    "elements": [
+        {
+            "type": "Label",
+            "id": "title_label",
+            "rect": ["center", 150, "100%", "80px"],
+            "text": "Configuration",
+            "style": "title_label"
+        },
+        {
+            "type": "Button",
+            "id": "invert_y_button",
+            "rect": ["center", 300, "400px", "50px"],
+            "text": "Invert Y-Axis: OFF",
+            "action": "toggle_invert_y",
+            "context_key": "invert_y_text"
+        },
+        {
+            "type": "Button",
+            "rect": ["center", 450, "200px", "50px"],
+            "text": "Back",
+            "action": "back_to_previous"
+        }
+    ]
+}

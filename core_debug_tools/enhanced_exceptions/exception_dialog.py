@@ -1,4 +1,4 @@
-# PuffinPyEditor/core_debug_tools/enhanced_exceptions/exception_dialog.py
+# Koromali/core_debug_tools/enhanced_exceptions/exception_dialog.py
 import traceback
 import platform
 import sys
@@ -16,7 +16,7 @@ class ExceptionDialog(QDialog):
 
     def __init__(self, exc_type, exc_value, exc_tb, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("PuffinPyEditor - Unhandled Exception")
+        self.setWindowTitle("Koromali - Unhandled Exception")
         self.setMinimumSize(700, 500)
 
         # Format the traceback
@@ -24,7 +24,7 @@ class ExceptionDialog(QDialog):
         self.traceback_text = "".join(tb_list)
         self.exception_type = exc_type.__name__
         self.system_info = (
-            f"PuffinPyEditor Version: {APP_VERSION}\n"
+            f"Koromali Version: {APP_VERSION}\n"
             f"Python Version: {sys.version.split()[0]}\n"
             f"Platform: {platform.system()} {platform.release()}"
         )
@@ -38,7 +38,7 @@ class ExceptionDialog(QDialog):
         # UI Setup
         layout = QVBoxLayout(self)
         label = QLabel(
-            "An unexpected error occurred. You can help improve PuffinPyEditor "
+            "An unexpected error occurred. You can help improve Koromali "
             "by reporting this issue on GitHub."
         )
         label.setWordWrap(True)
@@ -101,7 +101,7 @@ Steps to reproduce the behavior:
         issue_body = quote_plus(issue_body_template.strip())
 
         url = QUrl(
-            f"https://github.com/Stelliro/PuffinPyEditor/issues/new?title="
+            f"https://github.com/Stelliro/Koromali/issues/new?title="
             f"{issue_title}&body={issue_body}"
         )
         QDesktopServices.openUrl(url)

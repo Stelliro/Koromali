@@ -1,15 +1,15 @@
-# 🐧 PuffinPyEditor
+# 🐧 Koromali
 
 **DEVELOPED WITH AI**
 
 **A Modern, Extensible Python IDE built with PyQt6 and a lot of passion.**
 
-PuffinPyEditor is a lightweight yet powerful Integrated Development Environment for Python developers. Built from the ground up using Python and the PyQt6 framework, it aims to provide a clean, modern, and highly customizable coding experience. It's perfect for developers who want a fast, native-feeling tool that integrates essential features like version control, a built-in terminal, and a dynamic plugin system, without the overhead of larger IDEs.
+Koromali is a lightweight yet powerful Integrated Development Environment for Python developers. Built from the ground up using Python and the PyQt6 framework, it aims to provide a clean, modern, and highly customizable coding experience. It's perfect for developers who want a fast, native-feeling tool that integrates essential features like version control, a built-in terminal, and a dynamic plugin system, without the overhead of larger IDEs.
 
-### Why PuffinPyEditor?
+### Why Koromali?
 
 *   **For Python, By Python:** The entire application is a testament to what's possible with Python, using the powerful PyQt6 framework for its native UI.
-*   **Lightweight & Fast:** Starts quickly and stays responsive. PuffinPyEditor focuses on providing the essential tools you need without the bloat.
+*   **Lightweight & Fast:** Starts quickly and stays responsive. Koromali focuses on providing the essential tools you need without the bloat.
 *   **You're in Control:** With a deep theme customizer, extensive preferences, and a simple plugin system, you can tailor the editor to your exact workflow and aesthetic.
 
 ## ✨ Key Features
@@ -20,7 +20,7 @@ PuffinPyEditor is a lightweight yet powerful Integrated Development Environment 
 *   **Advanced Syntax Highlighting:** Full Python syntax highlighting that adapts instantly to your chosen theme.
 *   **Intelligent Code Completion:** Smart suggestions, function signature hints, and detailed tooltips powered by the Jedi engine.
 *   **Go to Definition:** Instantly jump to the definition of any class, function, or variable with a single keypress (`F12`).
-*   **Efficient Text Editing:** Enjoy modern editor features like line numbers, auto-indentation (tabs or spaces), automatic bracket/quote pairing, and multi-line editing.
+*   **Efficient Text Editing:** Enjoy modern editor features like line numbers, auto-indexntation (tabs or spaces), automatic bracket/quote pairing, and multi-line editing.
 *   **Powerful Find & Replace:** A familiar and robust dialog for searching within files, with support for case sensitivity, whole words, and more.
 
 ---
@@ -63,8 +63,8 @@ PuffinPyEditor is a lightweight yet powerful Integrated Development Environment 
 ---
 
 #### 🎨 **Powerful Customization**
-*   **Advanced Theme Manager:** PuffinPyEditor comes with a curated set of light and dark themes. The powerful **Theme Customizer** allows you to edit any theme, tweak every color, and save your own unique creations.
-*   **Extensive Preferences:** Customize everything from font family and size to indentation settings (tabs vs. spaces) and auto-save behavior.
+*   **Advanced Theme Manager:** Koromali comes with a curated set of light and dark themes. The powerful **Theme Customizer** allows you to edit any theme, tweak every color, and save your own unique creations.
+*   **Extensive Preferences:** Customize everything from font family and size to indexntation settings (tabs vs. spaces) and auto-save behavior.
 
 ---
 
@@ -75,78 +75,65 @@ PuffinPyEditor is a lightweight yet powerful Integrated Development Environment 
 ## 🚀 Getting Started
 
 ### Using the Installer (Windows)
-The easiest way to get started on Windows is to download the latest setup executable from the [**Releases**](https://github.com/Stelliro/PuffinPyEditor/releases) page. The installer provides options for creating desktop and Start Menu shortcuts.
+The easiest way to get started on Windows is to download the latest setup executable from the [**Releases**](https://github.com/Stelliro/Koromali/releases) page. The installer provides options for creating desktop and Start Menu shortcuts.
 
 ### Running from Source
-To run the editor from the source code, you will need `Python 3` and `Git` installed on your system.
+To run the editor from the source code, you will need `Python 3` and `Git` installed on your system. The repository includes convenient scripts to automate the setup process.
 
 1.  **Clone the Repository:**
     ```bash
-    git clone https://github.com/Stelliro/PuffinPyEditor.git
-    cd PuffinPyEditor
+    git clone https://github.com/Stelliro/Koromali.git
+    cd Koromali
     ```
 
-2.  **Create and Activate a Virtual Environment:**
-    ```bash
-    # For Windows
-    python -m venv venv
-    .\venv\Scripts\activate
+2.  **Run the Setup Script:**
+    *   **On Windows:** Double-click `run.bat` or run it from the command line.
+        ```cmd
+        .\run.bat
+        ```
+    *   **On macOS/Linux:** Make the script executable and run it.
+        ```bash
+        chmod +x run.sh
+        ./run.sh
+        ```
 
-    # For macOS/Linux
-    python3 -m venv venv
-    source venv/bin/activate
-    ```
-
-3.  **Install Dependencies:**
-    ```bash
-    pip install -r requirements.txt
-    ```
-
-4.  **Run the Editor:**
-    ```bash
-    python main.py
-    ```
+    The first time you run the script, it will automatically create a local virtual environment (`venv`), install all the required dependencies from `requirements.txt`, and then launch the application. Subsequent runs will be much faster as they will use the existing environment.
 
 ## 📦 Creating a Windows Installer
 
-A Windows installer can be created using the provided `build.bat` script. This process bundles the application into a standalone executable and then packages it into a themed, user-friendly setup file.
+A Windows installer is built automatically for each new version tag pushed to the repository via **GitHub Actions**.
 
-#### Prerequisites
+To build an installer for your own application using Koromali, you can use the built-in **Installer Builder** plugin found under the `Tools` menu. This powerful tool allows you to define a highly customized installer using a single Markdown configuration file.
 
-1.  **NSIS:** You must have [NSIS (Nullsoft Scriptable Install System)](https://nsis.sourceforge.io/Download) installed. During installation, make sure to allow it to be added to your system's PATH.
-2.  **Project Dependencies:** Ensure you have installed all the project's Python dependencies by running `pip install -r requirements.txt`.
+#### Features of the Markdown Installer
+*   **Define Metadata:** Set your application's name, version, author, and icons.
+*   **Custom Pages:** Create custom installer pages like Welcome, License Agreement, and Finish screens directly from Markdown text.
+*   **Optional Components:** Use Markdown checklists to offer optional installation components like desktop shortcuts or additional plugins.
+*   **Remote Content:** Create installer pages that download and install additional content (like asset packs or updates) from a URL during installation.
 
-#### Build Steps
-
-1.  Open a command prompt in the root directory of the project.
-2.  Run the build script:
-    ```bash
-    .\installer\build.bat
-    ```
-3.  The script will:
-    *   Verify that `pyinstaller` and `makensis` are available.
-    *   Run PyInstaller to bundle the application into the `/dist/PuffinPyEditor` directory.
-    *   Run NSIS to compile the installer using the script and assets in the `/installer` directory.
-4.  Once complete, the final setup file (e.g., `PuffinPyEditor_v1.2.0_Setup.exe`) will be located in the `/dist` directory.
+For detailed instructions on the Markdown syntax, open the Installer Builder from the `Tools` menu.
 
 ## 🔒 Security & Privacy
 
-**Important:** The editor stores your personal settings, including your GitHub access token and AI Export loadouts, in a file named `puffin_editor_settings.json` in the project's root directory.
+**Important:** The editor stores your personal settings, including your GitHub access token and API keys, in your local application data directory.
+*   **Windows:** `%LOCALAPPDATA%\Stelliro\Koromali`
+*   **Linux:** `~/.local/share/Stelliro/Koromali`
+*   **macOS:** `~/Library/Application Support/Stelliro/Koromali`
 
-*   This file is **automatically ignored by Git** thanks to the `.gitignore` file. You should **never** commit this file to a public repository.
-*   The "Export for AI" and "Create Release" tools are also configured to **exclude** this file automatically.
-*   Always be mindful not to hard-code sensitive information like passwords or API keys directly into your source code.
+These configuration files are specific to your machine and are **never** included in project-level operations like "Export for AI", version control, or installer builds.
+
+Always be mindful not to hard-code sensitive information like passwords or API keys directly into your source code.
 
 ## 🧩 The Plugin System
 
-PuffinPyEditor can be extended with custom plugins located in the `/plugins` directory.
+Koromali can be extended with custom plugins.
 
-**🔒 Security Warning:** Plugins are powerful and execute with the same permissions as the editor itself. For your security, **only install plugins from authors and sources you trust.** PuffinPyEditor cannot vet the safety or integrity of third-party plugins.
+**🔒 Security Warning:** Plugins are powerful and execute with the same permissions as the editor itself. For your security, **only install plugins from authors and sources you trust.** Koromali cannot vet the safety or integrity of third-party plugins.
 
 #### For Users
 You can install new plugins easily:
 1.  Navigate to `File > Preferences > Plugins`.
-2.  **From GitHub:** Enter a repository URL (like `Stelliro/puffin-plugins`) and click "Fetch" to see a list of available plugins.
+2.  **From GitHub:** Enter a repository URL (like `Stelliro/Koromali-plugins`) and click "Fetch" to see a list of available plugins.
 3.  **From a File:** Click "Install from File..." to upload a `.zip` archive of a plugin.
 4.  After installation, a restart will be required to load the new plugin.
 
@@ -185,9 +172,3 @@ Contributions are welcome! Whether it's reporting a bug, suggesting a new featur
 This project is licensed under the **Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License**.
 
 In short, you are free to share and adapt the material for **non-commercial purposes**, as long as you give appropriate credit and distribute your contributions under the same license. For the full license text, please see the `LICENSE.md` file.
-
-# PuffinPyEditor Plugin Distribution Repository
-This repository is structured to serve plugins for the PuffinPyEditor.
-- `index.json`: A manifest file listing all available plugins and their download URLs.
-- `zips/`: This directory contains the packaged `.zip` files for each plugin.
-To publish a new version of a plugin, use the "Publish Plugin" tool inside PuffinPyEditor.

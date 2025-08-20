@@ -1,13 +1,13 @@
-# PuffinPyEditor/ui/widgets/draggable_tab_widget.py [MODIFIED]
+# Koromali/ui/widgets/draggable_tab_widget.py
 import os
 from PyQt6.QtWidgets import (QTabWidget, QTabBar, QMainWindow, QWidget,
-                             QApplication)
+                             QApplication, QMenu)
 from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QMimeData, QByteArray
 from PyQt6.QtGui import QMouseEvent, QDrag
 from utils.logger import log
 
 # Custom MIME type to identify our widget drags
-WIDGET_REFERENCE_MIME_TYPE = "application/x-puffin-widget-reference"
+WIDGET_REFERENCE_MIME_TYPE = "application/x-Koromali-widget-reference"
 
 
 class FloatingTabWindow(QMainWindow):
@@ -19,7 +19,7 @@ class FloatingTabWindow(QMainWindow):
         self.hosted_widget = widget
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
 
-        self.setWindowTitle(f"{tab_text} - PuffinPyEditor")
+        self.setWindowTitle(f"{tab_text} - Koromali")
         self.setCentralWidget(self.hosted_widget)
         if icon:
             self.setWindowIcon(icon)
@@ -32,7 +32,6 @@ class FloatingTabWindow(QMainWindow):
         self.main_window_ref._close_widget_safely(self.hosted_widget, event)
 
     def mousePressEvent(self, event: QMouseEvent):
-        # We start a drag if the left button is pressed on the window frame (title bar).
         if event.button() == Qt.MouseButton.LeftButton:
             self.drag_start_pos = event.globalPosition().toPoint()
         super().mousePressEvent(event)
@@ -41,7 +40,6 @@ class FloatingTabWindow(QMainWindow):
         if not (event.buttons() & Qt.MouseButton.LeftButton) or not self.drag_start_pos:
             return super().mouseMoveEvent(event)
 
-        # Check if the mouse has moved far enough to be considered a drag
         if (
                 event.globalPosition().toPoint() - self.drag_start_pos).manhattanLength() < QApplication.startDragDistance():
             return super().mouseMoveEvent(event)
@@ -53,14 +51,9 @@ class FloatingTabWindow(QMainWindow):
         mime_data.setData(WIDGET_REFERENCE_MIME_TYPE, widget_id_bytes)
         drag.setMimeData(mime_data)
 
-        # Hide the window while dragging. If the drag is cancelled, we'll show it again.
         self.hide()
-
-        # The exec() call blocks until the drag is finished.
         result = drag.exec(Qt.DropAction.MoveAction)
-
         if result == Qt.DropAction.IgnoreAction:
-            # Drop was cancelled or unsuccessful, show the window again.
             log.debug("Tab drag cancelled, showing floating window again.")
             self.show()
 
@@ -71,11 +64,38 @@ class DraggableTabBar(QTabBar):
     """A QTabBar that detects dragging out and accepts drops from floating windows."""
     tab_dragged_out = pyqtSignal(int, QPoint)
     tab_reinserted = pyqtSignal(QWidget, int)
+    # --- NEW: Signals for close actions ---
+    close_tab_requested = pyqtSignal(int)
+    close_other_tabs_requested = pyqtSignal(int)
+    close_all_tabs_requested = pyqtSignal()
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, detachable=True):
         super().__init__(parent)
         self.drag_start_pos = None
         self.setAcceptDrops(True)
+        # --- NEW: Flag to control detaching behavior ---
+        self.detachable = detachable
+
+    def contextMenuEvent(self, event):
+        """Creates a context menu for the tab bar."""
+        menu = QMenu(self)
+        tab_index = self.tabAt(event.pos())
+        
+        if tab_index > -1:
+            close_action = menu.addAction("Close Tab")
+            close_action.triggered.connect(lambda: self.close_tab_requested.emit(tab_index))
+
+            close_others_action = menu.addAction("Close Other Tabs")
+            close_others_action.triggered.connect(lambda: self.close_other_tabs_requested.emit(tab_index))
+            if self.count() <= 1:
+                close_others_action.setEnabled(False)
+        
+        close_all_action = menu.addAction("Close All Tabs")
+        close_all_action.triggered.connect(self.close_all_tabs_requested.emit)
+        if self.count() == 0:
+            close_all_action.setEnabled(False)
+            
+        menu.exec(event.globalPos())
 
     def mousePressEvent(self, event: QMouseEvent):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -86,15 +106,17 @@ class DraggableTabBar(QTabBar):
         if not (event.buttons() & Qt.MouseButton.LeftButton) or self.drag_start_pos is None:
             return super().mouseMoveEvent(event)
 
-        if (event.pos() - self.drag_start_pos).manhattanLength() < QApplication.startDragDistance():
-            return super().mouseMoveEvent(event)
+        # --- MODIFIED: Only allow dragging out if detachable is True ---
+        if self.detachable and (event.pos() - self.drag_start_pos).manhattanLength() > QApplication.startDragDistance():
+            if not self.rect().contains(event.pos()):
+                tab_index = self.tabAt(self.drag_start_pos)
+                if tab_index > -1:
+                    self.tab_dragged_out.emit(tab_index, event.globalPosition().toPoint())
+                    self.drag_start_pos = None
+        else:
+            # Still allow normal tab reordering drag
+            super().mouseMoveEvent(event)
 
-        # If drag moves outside the tab bar, initiate a drag-out
-        if not self.rect().contains(event.pos()):
-            tab_index = self.tabAt(self.drag_start_pos)
-            if tab_index > -1:
-                self.tab_dragged_out.emit(tab_index, event.globalPosition().toPoint())
-                self.drag_start_pos = None
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasFormat(WIDGET_REFERENCE_MIME_TYPE):
@@ -109,7 +131,6 @@ class DraggableTabBar(QTabBar):
         widget_id_bytes = event.mimeData().data(WIDGET_REFERENCE_MIME_TYPE)
         widget_id_str = widget_id_bytes.data().decode()
 
-        # Find the widget instance from the main window's tracking dict
         main_window = self.parentWidget().main_window_ref
         widget_to_reinsert = None
         for widget, data in main_window.editor_tabs_data.items():
@@ -129,14 +150,21 @@ class DraggableTabBar(QTabBar):
 
 class DraggableTabWidget(QTabWidget):
     """A QTabWidget that uses a DraggableTabBar to allow detaching and re-attaching tabs."""
+    close_tab_requested = pyqtSignal(int)
+    close_other_tabs_requested = pyqtSignal(int)
+    close_all_tabs_requested = pyqtSignal()
 
-    def __init__(self, main_window_ref, parent=None):
+    def __init__(self, main_window_ref, parent=None, detachable=True):
         super().__init__(parent)
         self.main_window_ref = main_window_ref
-        tab_bar = DraggableTabBar(self)
+        tab_bar = DraggableTabBar(self, detachable)
         self.setTabBar(tab_bar)
         tab_bar.tab_dragged_out.connect(self._handle_tab_drag_out)
         tab_bar.tab_reinserted.connect(self._handle_tab_reinsert)
+        # --- NEW: Propagate signals up ---
+        tab_bar.close_tab_requested.connect(self.close_tab_requested)
+        tab_bar.close_other_tabs_requested.connect(self.close_other_tabs_requested)
+        tab_bar.close_all_tabs_requested.connect(self.close_all_tabs_requested)
 
     def _handle_tab_drag_out(self, index: int, global_pos: QPoint):
         log.info(f"Detaching tab at index {index}.")

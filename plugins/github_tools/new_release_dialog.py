@@ -1,4 +1,4 @@
-# PuffinPyEditor/plugins/github_tools/new_release_dialog.py
+# Koromali/plugins/github_tools/new_release_dialog.py
 from typing import Optional, Dict, Any
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QFormLayout,
                              QDialogButtonBox, QLineEdit, QTextEdit, QLabel,

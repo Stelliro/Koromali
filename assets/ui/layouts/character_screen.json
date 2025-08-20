@@ -1,0 +1,47 @@
+{
+    "id": "character_screen",
+    "elements": [
+        {
+            "type": "Panel",
+            "id": "main_panel",
+            "rect": ["center", "center", "800px", "600px"],
+            "elements": [
+                {
+                    "type": "Label",
+                    "id": "title_label",
+                    "rect": ["center", 20, "100%", "80px"],
+                    "text": "CHARACTER",
+                    "style": "title_label"
+                },
+                {
+                    "type": "Label",
+                    "rect": [30, 100, "100px", "30px"],
+                    "text": "Level:",
+                    "text_align": "left"
+                },
+                {
+                    "type": "Label",
+                    "id": "level_value",
+                    "rect": [150, 100, "100px", "30px"],
+                    "text": "1",
+                    "text_align": "left",
+                    "context_key": "level_text"
+                },
+                 {
+                    "type": "Label",
+                    "rect": [400, 100, "200px", "30px"],
+                    "text": "Attribute Points:",
+                    "text_align": "left"
+                },
+                {
+                    "type": "Label",
+                    "id": "ap_value",
+                    "rect": [600, 100, "50px", "30px"],
+                    "text": "0",
+                    "text_align": "left",
+                    "context_key": "attribute_points_text"
+                }
+            ]
+        }
+    ]
+}

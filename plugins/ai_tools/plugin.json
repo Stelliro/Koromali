@@ -1,8 +1,0 @@
-{
-    "id": "ai_tools",
-    "name": "AI Tools",
-    "author": "PuffinPy Team",
-    "version": "1.1.2",
-    "description": "Adds an 'Export for AI' dialog.",
-    "entry_point": "plugin_main.py"
-}

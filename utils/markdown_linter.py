@@ -1,4 +1,4 @@
-# PuffinPyEditor/utils/markdown_linter.py
+# Koromali/utils/markdown_linter.py
 import re
 from typing import List, Dict
 

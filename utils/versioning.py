@@ -1,10 +1,9 @@
-# PuffinPyEditor/utils/versioning.py
+# Koromali/utils/versioning.py
 import os
 from packaging import version
 from .logger import log
 from .helpers import get_base_path
 
-# This will now correctly find the project root whether running from source or frozen.
 ROOT_DIR = get_base_path()
 VERSION_FILE_PATH = os.path.join(ROOT_DIR, "VERSION.txt")
 

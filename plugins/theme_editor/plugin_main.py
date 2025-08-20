@@ -1,14 +1,14 @@
-# PuffinPyEditor/plugins/theme_editor/plugin_main.py
+# Koromali/plugins/theme_editor/plugin_main.py
 from .theme_editor_dialog import ThemeEditorDialog
-from app_core.puffin_api import PuffinPluginAPI
+from app_core.koromali_api import KoromaliPluginAPI
 from utils.logger import log
 
 
 class ThemeEditorPlugin:
     """Initializes the Theme Editor and connects it to the UI."""
 
-    def __init__(self, puffin_api: PuffinPluginAPI):
-        self.api = puffin_api
+    def __init__(self, koromali_api: KoromaliPluginAPI):
+        self.api = koromali_api
         self.main_window = self.api.get_main_window()
         # Correctly get the theme_manager via the API
         self.theme_manager = self.api.get_manager("theme")
@@ -53,6 +53,6 @@ class ThemeEditorPlugin:
             self.dialog_instance.deleteLater()
 
 
-def initialize(puffin_api: PuffinPluginAPI):
+def initialize(koromali_api: KoromaliPluginAPI):
     """Entry point for the Theme Editor plugin."""
-    return ThemeEditorPlugin(puffin_api)
+    return ThemeEditorPlugin(koromali_api)

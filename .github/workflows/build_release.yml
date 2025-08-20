@@ -1,0 +1,67 @@
+name: Build and Release Installer
+
+on:
+  push:
+    tags:
+      - 'v*.*.*' # Trigger on tags like v1.0.0
+  workflow_dispatch: # Allow manual triggering
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install PyInstaller
+        run: pip install pyinstaller
+
+      - name: Set up NSIS
+        uses: joncampbell123/nsis-action@v2
+
+      - name: Extract version from tag
+        id: get_version
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
+
+      - name: Update VERSION.txt
+        shell: bash
+        run: echo "${{ env.VERSION }}" > VERSION.txt
+
+      - name: Build executables with PyInstaller
+        run: |
+          pyinstaller main.spec --noconfirm
+          pyinstaller tray_app.spec --noconfirm
+
+      - name: Create Installer with NSIS
+        run: python .github/workflows/build_script.py --version ${{ env.VERSION }}
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release v${{ env.VERSION }}
+          draft: false
+          prerelease: false
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./dist/Koromali_${{ env.VERSION }}_Setup.exe
+          asset_name: Koromali_v${{ env.VERSION }}_Setup.exe
+          asset_content_type: application/octet-stream

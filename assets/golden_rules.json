@@ -1,13 +1,11 @@
 {
-    "name": "Default PuffinPy Golden Rules",
+    "name": "Default Koromali Golden Rules",
     "description": "The standard set of fundamental rules for AI code generation, emphasizing a clean, patch-like output.",
     "rules": [
-        "Your response MUST ONLY contain the complete, updated content for each file that needs to change.",
-        "Enclose each file's content in the standard `### File: /path/to/file.ext` and code block format.",
-        "Do not add any extra commentary, explanations, or summaries outside of the code blocks.",
-        "Each provided file must be complete and correct, including all necessary imports and boilerplate.",
-        "If a file is not being changed, do not include it in the response.",
+        "Your response MUST ONLY contain file modifications, creations, deletions, or renames.",
+        "Do not add any extra commentary, explanations, or summaries outside of the formatted blocks.",
+        "If a file from the user's prompt is not being changed, DO NOT include it in your response.",
         "Ensure file paths are relative to the project root and use forward slashes (e.g., `app_core/main.py`).",
-        "Maintain existing code style, indentation, and conventions for all unchanged parts of a file."
+        "You can use `~~~` as an alternative to ``` for code blocks; the system will automatically convert it. This is useful for markdown files."
     ]
 }

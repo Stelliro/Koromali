@@ -1,14 +1,17 @@
-# PuffinPyEditor/app_core/linter_manager.py
+# Koromali/app_core/linter_manager.py
 import subprocess
 import os
 import sys
 import shutil
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, TYPE_CHECKING
 from PyQt6.QtCore import QObject, QThread, pyqtSignal
 from utils.logger import log
 
+if TYPE_CHECKING:
+    from app_core.settings_manager import SettingsManager
+
 # Use a very unlikely string as a delimiter
-SAFE_DELIMITER = "|||PUFFIN_LINT|||"
+SAFE_DELIMITER = "|||Koromali_LINT|||"
 
 
 class LinterRunner(QObject):

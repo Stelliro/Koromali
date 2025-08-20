@@ -1,0 +1,10 @@
+{
+    "name": "Default Koromali Style",
+    "description": "The standard style guide for Koromali, emphasizing clean, maintainable, and modern Python.",
+    "rules": [
+        "Do not remove any code that is unrelated to the fix; only replace or add what is necessary.",
+        "Maintain the existing coding style, indexntation, and conventions.",
+        "Ensure all refactored code is more readable and efficient, adding comments to explain complex logic.",
+        "Add type hints to function signatures for clarity and static analysis."
+    ]
+}

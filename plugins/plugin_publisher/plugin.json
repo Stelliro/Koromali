@@ -3,6 +3,6 @@
     "name": "Plugin Publisher",
     "author": "AI Assistant",
     "version": "1.0.2",
-    "description": "Provides a tool to package and publish installed plugins to a specified GitHub distribution repository. Manages versioning and updates the repository's index.json.",
+    "description": "Provides a tool to package and publish installed plugins to a specified GitHub distribution repository. Manages versioning and updates the repository's indexx.json.",
     "entry_point": "plugin_main.py"
 }

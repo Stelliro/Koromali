@@ -1,10 +1,10 @@
-# PuffinPyEditor/ui/widgets/source_control_panel.py
+# Koromali/ui/widgets/source_control_panel.py
 import os
 from typing import List, Dict, Optional
 from git import Repo, InvalidGitRepositoryError, Actor
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QTreeWidget,
                              QTreeWidgetItem, QMenu, QMessageBox, QLabel, QHeaderView, QLineEdit, QComboBox,
-                             QSizePolicy, QFrame)
+                             QSizePolicy, QFrame, QInputDialog)
 from PyQt6.QtGui import QColor
 from PyQt6.QtCore import Qt, pyqtSignal, QPoint
 import qtawesome as qta
@@ -12,8 +12,7 @@ import qtawesome as qta
 from app_core.project_manager import ProjectManager
 from app_core.source_control_manager import SourceControlManager
 from app_core.github_manager import GitHubManager
-from app_core.puffin_api import PuffinPluginAPI
-from app_core.settings_manager import settings_manager
+from app_core.koromali_api import KoromaliPluginAPI
 
 
 class ProjectSourceControlPanel(QWidget):
@@ -29,12 +28,13 @@ class ProjectSourceControlPanel(QWidget):
     def __init__(self, project_manager: ProjectManager,
                  git_manager: SourceControlManager,
                  github_manager: GitHubManager,
-                 puffin_api: PuffinPluginAPI, parent=None):
+                 koromali_api: KoromaliPluginAPI, parent=None):
         super().__init__(parent)
         self.project_manager = project_manager
         self.git_manager = git_manager
         self.github_manager = github_manager
-        self.api = puffin_api
+        self.api = koromali_api
+        self.settings_manager = koromali_api.get_manager("settings")
         self.staged_color = QColor("#A7C080")
         self.unstaged_color = QColor("#DBBC7F")
         self.conflicted_color = QColor("#E53935")  # Added color for conflicts
@@ -85,7 +85,7 @@ class ProjectSourceControlPanel(QWidget):
         self.project_tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         header = self.project_tree.header()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         layout.addWidget(self.project_tree)
 
         self.commit_message_edit = QComboBox()
@@ -113,7 +113,7 @@ class ProjectSourceControlPanel(QWidget):
         self.git_manager.git_error.connect(self._handle_git_error)
         self.git_manager.dubious_ownership_detected.connect(self._handle_dubious_ownership)
         self.git_manager.git_success.connect(self._handle_git_success)
-        self.github_manager.operation_success.connect(self._handle_git_success)
+        self.github_manager.operation_success.connect(self._handle_github_success)
         self.github_manager.operation_failed.connect(self._handle_git_error)
 
         self.refresh_all_button.clicked.connect(self.refresh_all_projects)
@@ -133,6 +133,9 @@ class ProjectSourceControlPanel(QWidget):
         self.commit_message_edit.setEnabled(not locked)
         self.status_label.setText(message)
 
+    def update_theme(self):
+        pass # placeholder
+
     def update_icons(self):
         self.refresh_all_button.setIcon(qta.icon('mdi.refresh'))
         self.pull_button.setIcon(qta.icon('mdi.arrow-down-bold-outline'))
@@ -148,7 +151,7 @@ class ProjectSourceControlPanel(QWidget):
         self._populate_commit_history()
 
     def _populate_commit_history(self):
-        history = settings_manager.get("commit_message_history", [])
+        history = self.settings_manager.get("commit_message_history", [])
         self.commit_message_edit.clear()
         self.commit_message_edit.addItems(history)
         self.commit_message_edit.setCurrentText("")
@@ -263,24 +266,29 @@ class ProjectSourceControlPanel(QWidget):
             self.git_manager.fix_branch_mismatch(path)
 
     def _handle_git_success(self, message: str, data: dict):
-        if data.get("deleted_tags") is not None:
-            QMessageBox.information(self, "Cleanup Complete", message)
-
-        self.set_ui_locked(False, f"Success: {message}")
-
         if "committed" in message.lower() and not data.get('no_changes'):
             commit_message = self.commit_message_edit.currentText().strip()
-            history = settings_manager.get("commit_message_history", [])
+            history = self.settings_manager.get("commit_message_history", [])
             if commit_message in history:
                 history.remove(commit_message)
             history.insert(0, commit_message)
-            max_history = settings_manager.get("max_commit_history", 50)
-            settings_manager.set("commit_message_history", history[:max_history])
+            max_history = self.settings_manager.get("max_commit_history", 50)
+            self.settings_manager.set("commit_message_history", history[:max_history])
             self._populate_commit_history()
 
+        self.set_ui_locked(False, f"Success: {message}")
         self.refresh_all_projects()
 
-    # NEW METHOD
+    def _handle_github_success(self, message: str, data: dict):
+        if data.get("operation") == "update" and (repo_data := data.get("repo_data")):
+            self.set_ui_locked(True, "Updating local remote URL...")
+            repo_path = self._get_selected_project_path()
+            if repo_path:
+                self.git_manager.set_remote_url(repo_path, repo_data['clone_url'])
+        else:
+            self.set_ui_locked(False, f"Success: {message}")
+            self.refresh_all_projects()
+
     def _handle_dubious_ownership(self, repo_path: str):
         """Shows a user-friendly dialog for the 'dubious ownership' error."""
         self.set_ui_locked(False, "Git ownership issue detected.")
@@ -400,6 +408,9 @@ class ProjectSourceControlPanel(QWidget):
 
         menu = QMenu()
         if data['type'] == 'project':
+            menu.addAction(qta.icon('mdi.pencil-outline'), "Rename Repository...",
+                           lambda: self._action_rename_repo(path))
+            menu.addSeparator()
             menu.addAction(qta.icon('mdi.refresh'), "Refresh Status",
                            lambda: self.git_manager.get_status(path))
             vis_action = menu.addAction(qta.icon('mdi.eye-outline'), "Change GitHub Visibility...")
@@ -429,3 +440,31 @@ class ProjectSourceControlPanel(QWidget):
 
         if menu.actions():
             menu.exec(self.project_tree.viewport().mapToGlobal(position))
+
+    def _action_rename_repo(self, path: str):
+        """Handles the repository renaming workflow."""
+        try:
+            repo = Repo(path)
+            if not repo.remotes.origin:
+                QMessageBox.warning(self, "No Remote", "This project does not have an 'origin' remote configured.")
+                return
+
+            remote_url = repo.remotes.origin.url
+            owner, old_repo_name = self.git_manager.parse_git_url(remote_url)
+
+            if not owner or not old_repo_name:
+                QMessageBox.critical(self, "Error", "Could not parse the owner and repository name from the remote URL.")
+                return
+
+            new_repo_name, ok = QInputDialog.getText(self, "Rename Repository", "Enter the new repository name:", text=old_repo_name)
+
+            if ok and new_repo_name and new_repo_name != old_repo_name:
+                self.set_ui_locked(True, f"Renaming '{old_repo_name}' to '{new_repo_name}'...")
+                self.github_manager.update_repo(owner, old_repo_name, {'name': new_repo_name})
+            elif ok:
+                 self.set_ui_locked(False, "") # Clear status if user entered same name
+
+        except (InvalidGitRepositoryError, GitCommandError) as e:
+            QMessageBox.critical(self, "Git Error", f"Could not access repository details: {e}")
+        except Exception as e:
+            QMessageBox.critical(self, "Unexpected Error", str(e))

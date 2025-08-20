@@ -1,11 +1,40 @@
-flake8
-findstr
-GitPython
-jedi
-jsonschema
-Markdown
-pywin32
+# Koromali/requirements.txt
+
+# Core framework for the user interface
 PyQt6
+
+# For SVG-based icons and theming helpers
 qtawesome
+
+# For intelligent Python code completion and analysis
+jedi
+
+# For robust semantic version comparisons
+packaging
+
+# For making HTTP requests (e.g., checking for updates, GitHub API)
 requests
-winshell
+
+# For reliably waiting for processes to exit (used by the updater)
+psutil
+
+# For interacting with Git repositories
+GitPython
+
+# For rendering Markdown content in viewer plugins
+Markdown
+PyYAML
+
+# For real-time collaboration in the Live Share plugin
+websockets
+cryptography
+
+# For the integrated web browser plugin
+PyQt6-WebEngine
+
+# For the Corvus TUI (optional developer dependency)
+textual
+
+# For creating Windows startup shortcuts (Windows-only, optional)
+# Install with: pip install winshell
+# winshell

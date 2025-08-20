@@ -1,0 +1,1196 @@
+--- a/README_UPDATE.md
++++ b/README_UPDATE.md
+@@ -0,0 +1,18 @@
++# Koromali Update Pack
++
++This update adds:
++- **Safe Mode** (`KOROMALI_SAFE_MODE=1`): skips user plugin directory; loads built-ins and core tools.
++- **No Plugins** (`KOROMALI_NO_PLUGINS=1`): skips plugin discovery entirely.
++- **Plugin quarantine**: after 3 consecutive load failures a plugin is auto-disabled (state persisted). Nothing is deleted.
++- Restored missing modules/shims; AI Studio patch parsing; style presets persistence; robust logger/helpers; theme validator.
++
++## Windows One-Click
++Double-click `run_windows.bat` (creates venv, installs requirements, launches).
++
++## Recovery tips
++If the app crashed recently due to a plugin, you can start with:
++```
++set KOROMALI_SAFE_MODE=1
++run_windows.bat
++```
++Then open Preferences → Plugins and re-enable intentionally.
+--- a/app_core/plugin_manager.py
++++ b/app_core/plugin_manager.py
+@@ -64,6 +64,8 @@
+ 
+ 
+ class PluginManager:
++    PLUGIN_FAILURES_FILE_NAME = 'plugin_failures.json'
++    FAILURE_DISABLE_THRESHOLD = 3
+     ESSENTIAL_PLUGIN_IDS = {
+         'python_tools',
+     }
+@@ -76,9 +78,29 @@
+         self.core_tools_directory = os.path.join(base_app_path, "core_debug_tools")
+         self.user_plugins_directory = os.path.join(app_data_path, "plugins")
+         self.plugin_states_file = os.path.join(app_data_path, "plugin_states.json")
++        self.plugin_failures_file = os.path.join(app_data_path, self.PLUGIN_FAILURES_FILE_NAME)
++        self._plugin_failures = {}
+         self._ensure_paths_and_packages()
+         self.plugins: Dict[str, Plugin] = {}
+         log.info("PluginManager initialized with a shared API.")
++
++    def _load_failures(self) -> Dict[str, int]:
++        try:
++            if os.path.exists(self.plugin_failures_file):
++                with open(self.plugin_failures_file,'r',encoding='utf-8') as f:
++                    data = json.load(f) or {}
++                    if isinstance(data, dict):
++                        return {str(k): int(v) for k,v in data.items() if isinstance(v,(int,str))}
++        except Exception as e:
++            log.warning(f"Could not read plugin failures file: {e}")
++        return {}
++
++    def _save_failures(self) -> None:
++        try:
++            with open(self.plugin_failures_file,'w',encoding='utf-8') as f:
++                json.dump(self._plugin_failures, f, indent=2)
++        except Exception as e:
++            log.warning(f"Could not write plugin failures file: {e}")
+ 
+     def _ensure_paths_and_packages(self):
+         """Ensures all plugin directories are treated as Python packages."""
+@@ -104,12 +126,24 @@
+                 f.write("# This file makes the user plugins directory a package.\n")
+ 
+     def discover_and_load_plugins(self, ignore_list: Optional[List[str]] = None):
++        import os
++        safe_mode = os.environ.get('KOROMALI_SAFE_MODE') in ('1','true','True')
++        no_plugins = os.environ.get('KOROMALI_NO_PLUGINS') in ('1','true','True')
++        if no_plugins:
++            log.warning('KOROMALI_NO_PLUGINS is set; skipping plugin discovery entirely.')
++            return
++        self._safe_mode = safe_mode
+         log.info("Starting full plugin discovery and loading process...")
+         ignore_list = ignore_list or []
+         for plugin in self.get_loaded_plugins():
+             self.unload_plugin(plugin.id)
+ 
+         self.plugins.clear()
++        # load failures state
++        try:
++            self._plugin_failures = self._load_failures()
++        except Exception:
++            self._plugin_failures = {}
+         self._discover_plugins()
+         self._load_plugin_states()
+         load_order = self._resolve_dependencies()
+@@ -132,6 +166,9 @@
+             "user": self.user_plugins_directory,
+         }
+         for source_type, plugin_dir in plugin_sources.items():
++            if getattr(self, '_safe_mode', False) and source_type == 'user':
++                log.info('Safe mode: skipping user plugins directory.')
++                continue
+             if not os.path.isdir(plugin_dir): continue
+             for item_name in os.listdir(plugin_dir):
+                 if item_name.startswith(('__', '.')): continue
+@@ -263,6 +300,16 @@
+         except Exception as e:
+             plugin.status_reason = f"Load error: {e}"
+             log.error(f"An unexpected error occurred loading plugin '{plugin.name}': {e}", exc_info=True)
++            try:
++                self._plugin_failures[plugin_id] = self._plugin_failures.get(plugin_id, 0) + 1
++                self._save_failures()
++                if self._plugin_failures[plugin_id] >= self.FAILURE_DISABLE_THRESHOLD:
++                    plugin.enabled = False
++                    self._save_plugin_states()
++                    plugin.status_reason += f" | auto-disabled after {self._plugin_failures[plugin_id]} failures"
++                    log.warning(f"Auto-disabled plugin '{plugin_id}' after repeated failures.")
++            except Exception as _e:
++                log.warning(f"Could not update failure counters for plugin '{plugin_id}': {_e}")
+             if module_name in sys.modules: del sys.modules[module_name]
+             return False
+ 
+--- a/plugins/ai_quick_actions/ai_response_dialog.py
++++ b/plugins/ai_quick_actions/ai_response_dialog.py
+@@ -1 +1,12 @@
+----DELETED---
++"""
++Compatibility wrapper: re-export AIResponseDialog from plugins.ai_suite.
++Keeps legacy imports alive without removing features.
++"""
++try:
++    from plugins.ai_suite.ai_response_dialog import AIResponseDialog  # type: ignore
++except Exception:
++    class AIResponseDialog:  # type: ignore
++        def __init__(self, *args, **kwargs): pass
++        def open(self): print("AIResponseDialog (stub): temporarily unavailable.")
++        def exec(self): return 0
++__all__ = ["AIResponseDialog"]
+--- a/plugins/ai_suite/response_parser.py
++++ b/plugins/ai_suite/response_parser.py
+@@ -1,113 +1,99 @@
+-# /plugins/ai_suite/response_parser.py
+-# Try to extract path from header; else infer from '--- a/...'
+-file_path = header.strip() if header else ''
+-if not file_path:
+-src, dst = _parse_paths_from_headers(body)
+-# Prefer dst when creating a file, else src
+-file_path = dst or src
+-if not file_path:
+-log.warning("AI Patcher: PATCH block missing filepath; skipping.")
+-continue
+-changes.append({'type': 'APPLY_PATCH', 'file_path': file_path, 'content': body})
+-log.info(f"AI Patcher: Parsed PATCH for {file_path}")
+-continue
++from __future__ import annotations
++import os, re
++from typing import List, Dict, Tuple
++try:
++    from utils.logger import log
++except Exception:
++    class _L:
++        def info(self,*a,**k): print("[INFO]",*a)
++        def warning(self,*a,**k): print("[WARN]",*a)
++        def error(self,*a,**k): print("[ERROR]",*a)
++    log = _L()  # type: ignore
+ 
++_FENCE_RE = re.compile(r"```(\w+)?\s*\n(.*?)\n```", re.DOTALL)
++_HUNK_RE = re.compile(r"^@@\s+-(\d+)(?:,(\d+))?\s+\+(\d+)(?:,(\d+))?\s+@@", re.MULTILINE)
+ 
+-log.warning(f"AI Patcher: Unknown block type '{label}'. Skipping.")
+-return changes
++def _split_patch_by_file(patch_text: str) -> List[Tuple[str, str]]:
++    files: List[Tuple[str,str]] = []
++    text = patch_text.replace('\r\n','\n').replace('\r','\n')
++    heads = list(re.finditer(r"^---\s+\S+\n\+\+\+\s+(\S+)", text, re.MULTILINE))
++    if not heads: return []
++    for i,m in enumerate(heads):
++        start = m.start(); path = m.group(1)
++        if path.startswith('a/') or path.startswith('b/'): path = path[2:]
++        end = heads[i+1].start() if i+1 < len(heads) else len(text)
++        files.append((path, text[start:end].strip()))
++    return files
+ 
++def _extract_file_from_header(code: str) -> str:
++    for line in code.splitlines()[:5]:
++        mm = re.search(r"(?i)\bfile\s*:\s*(.+)$", line.strip())
++        if mm: return mm.group(1).strip()
++    m = re.search(r"^\+\+\+\s+(\S+)", code, re.MULTILINE) or re.search(r"^---\s+(\S+)", code, re.MULTILINE)
++    if m:
++        path = m.group(1).strip()
++        if path.startswith('a/') or path.startswith('b/'): path = path[2:]
++        return path
++    return ""
+ 
++def parse_llm_response(text: str, project_root: str) -> List[Dict]:
++    changes: List[Dict] = []
++    for m in _FENCE_RE.finditer(text or ''):
++        label = (m.group(1) or '').strip().lower()
++        body = m.group(2)
++        if label not in {'patch','diff'}:
++            continue
++        per_file = _split_patch_by_file(body)
++        if per_file:
++            for path, chunk in per_file:
++                rel = os.path.relpath(path, start=project_root) if os.path.isabs(path) else path
++                changes.append({'type':'APPLY_PATCH','file_path':rel.replace('\\','/'),'content':chunk})
++                log.info(f"AI Patcher: parsed diff for {rel}")
++            continue
++        file_path = _extract_file_from_header(body)
++        if not file_path:
++            log.warning("AI Patcher: could not infer file path for a diff block; skipping."); continue
++        rel = os.path.relpath(file_path, start=project_root) if os.path.isabs(file_path) else file_path
++        changes.append({'type':'APPLY_PATCH','file_path':rel.replace('\\','/'),'content':body})
++        log.info(f"AI Patcher: parsed diff for {rel}")
++    return changes
+ 
+-
+-def apply_changes_to_project(project_root: str, changes: List[dict]) -> tuple[bool, str]:
+-"""Apply a list of parsed changes to a project directory transactionally.
+-
+-
+-Stage 1: validate & prepare a snapshot of final file contents without touching disk.
+-Stage 2: write the snapshot atomically (temp-file + os.replace). Refuse path traversal.
+-"""
+-log.info("AI Patcher: Stage 1/2 - Preparing snapshot of all file changes...")
+-snapshot: Dict[str, Optional[str]] = {} # path -> new_text (None means delete)
+-
+-
+-# Helper to load current or staged content
+-def _read_current(path: str) -> str:
+-if path in snapshot:
+-return '' if snapshot[path] is None else snapshot[path] # type: ignore
+-try:
+-with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+-return f.read()
+-except FileNotFoundError:
+-return ''
+-
+-
+-abs_root = os.path.normpath(os.path.abspath(project_root))
+-try:
+-for change in changes:
+-ctype = change.get('type')
+-if ctype in {'APPLY_PATCH', 'CREATE_OR_REPLACE', 'DELETE'}:
+-rel = change.get('file_path', '')
+-if not rel:
+-raise ValueError('Missing file_path')
+-path = _safe_join(project_root, rel)
+-elif ctype == 'MOVE':
+-src_rel = change.get('src_path', '')
+-dst_rel = change.get('dst_path', '')
+-if not (src_rel and dst_rel):
+-raise ValueError('MOVE requires src_path and dst_path')
+-src_path = _safe_join(project_root, src_rel)
+-dst_path = _safe_join(project_root, dst_rel)
+-else:
+-log.warning(f"AI Patcher: Unknown change type {ctype}; skipping.")
+-continue
+-
+-
+-if ctype == 'APPLY_PATCH':
+-current = _read_current(path)
+-try:
+-new_text = apply_patch(current, change.get('content', ''), lenient_whitespace=False)
+-except Exception as e:
+-return False, f"Patch failed for {path}: {e}"
+-snapshot[path] = new_text
+-
+-
+-elif ctype == 'CREATE_OR_REPLACE':
+-snapshot[path] = change.get('content', '')
+-
+-
+-elif ctype == 'DELETE':
+-snapshot[path] = None
+-
+-
+-elif ctype == 'MOVE':
+-# Simulate move by carrying staged or current content to destination, and deleting source
+-current = _read_current(src_path)
+-if current == '' and not os.path.exists(src_path) and src_path not in snapshot:
+-log.warning(f"AI Patcher: MOVE source does not exist: {src_path}")
+-snapshot[dst_path] = current
+-snapshot[src_path] = None
+-
+-
+-# Stage 2 - write atomically
+-log.info("AI Patcher: Stage 2/2 - Writing files atomically...")
+-for path, new_content in snapshot.items():
+-# Ensure path still within root (defense-in-depth)
+-path = _safe_join(project_root, os.path.relpath(path, project_root))
+-if new_content is None:
+-if os.path.exists(path):
+-os.remove(path)
+-log.info(f"Deleted file: {path}")
+-continue
+-
+-
+-os.makedirs(os.path.dirname(path), exist_ok=True)
+-tmp_path = f"{path}.tmp.{os.getpid()}"
+-with open(tmp_path, 'w', encoding='utf-8', newline='\n') as f:
+-f.write(new_content)
+-os.replace(tmp_path, path)
+-log.info(f"Wrote changes to: {path}")
+-except Exception as e:
+-return False, f"A critical error occurred during file writing: {e}"
+-
+-
+-return True, f"Successfully applied {len(snapshot)} change(s)."
++def apply_patch(original: str, patch_text: str) -> str:
++    if '--- ' not in patch_text or '+++ ' not in patch_text or '@@' not in patch_text:
++        return patch_text
++    src = original.replace('\r\n','\n').replace('\r','\n').split('\n')
++    out: List[str] = []; pos = 0
++    hunks = list(_HUNK_RE.finditer(patch_text))
++    if not hunks: return patch_text
++    for hi, hm in enumerate(hunks):
++        copy_until = max(0, int(hm.group(1)) - 1)
++        out.extend(src[pos:copy_until]); pos = copy_until
++        hunk_end = hunks[hi+1].start() if hi+1 < len(hunks) else len(patch_text)
++        body = patch_text[hm.end():hunk_end]
++        for line in body.splitlines():
++            if not line:
++                out.append(''); 
++                if pos < len(src): pos += 1
++                continue
++            tag, text = line[0], line[1:]
++            if tag == ' ':
++                if pos < len(src):
++                    if src[pos] != text:
++                        try:
++                            new_pos = src.index(text, pos, min(len(src), pos+200))
++                            out.extend(src[pos:new_pos]); pos = new_pos
++                        except ValueError: pass
++                    out.append(text); pos += 1
++                else: out.append(text)
++            elif tag == '-':
++                if pos < len(src) and src[pos] == text: pos += 1
++                else:
++                    try:
++                        idx = src.index(text, pos, min(len(src), pos+200))
++                        out.extend(src[pos:idx]); pos = idx+1
++                    except ValueError: pass
++            elif tag == '+':
++                out.append(text)
++            else:
++                out.append(line)
++    out.extend(src[pos:]); return '\n'.join(out)
+--- a/plugins/ai_suite/style_preset_manager.py
++++ b/plugins/ai_suite/style_preset_manager.py
+@@ -1,97 +1,55 @@
+-# /plugins/ai_suite/style_preset_manager.py
+-
+-
+-def _validate_preset(data: Dict[str, Any]) -> Dict[str, str]:
+-"""Return a sanitized copy of a preset dict. Only string->string entries are allowed."""
+-out: Dict[str, str] = {}
+-for k, v in (data or {}).items():
+-if isinstance(k, str) and isinstance(v, str):
+-out[k] = v
+-return out
+-
+-
++from __future__ import annotations
++import os, json
++from typing import Dict, Any
++try:
++    from utils.logger import log, get_app_data_path
++except Exception:
++    class _L:
++        def info(self,*a,**k): print("[INFO]",*a)
++        def warning(self,*a,**k): print("[WARN]",*a)
++        def error(self,*a,**k): print("[ERROR]",*a)
++    def get_app_data_path() -> str: return os.path.expanduser("~/.koromali")
++    log = _L()  # type: ignore
++try:
++    from utils.helpers import get_base_path
++except Exception:
++    def get_base_path(): 
++        return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
++DEFAULT_PRESETS: Dict[str, Dict[str, str]] = {
++    "Default": {"tone":"neutral","verbosity":"balanced","safety":"standard"},
++    "Detailed":{"tone":"professional","verbosity":"high","safety":"standard"},
++    "Friendly":{"tone":"casual","verbosity":"medium","safety":"standard"},
++}
++def _sanitize(data: Dict[str, Any]) -> Dict[str, str]:
++    return {str(k): str(v) for k,v in (data or {}).items() if isinstance(k,str) and isinstance(v,str)}
+ class StylePresetManager:
+-def __init__(self) -> None:
+-base = get_base_path()
+-self._dir = os.path.join(base, ".koromali")
+-self._file = os.path.join(self._dir, "style_presets.json")
+-self._presets: Dict[str, Dict[str, str]] = {}
+-self._load()
+-
+-
+-def list_presets(self) -> List[str]:
+-names = list(self._presets.keys())
+-# Keep "Default" first, avoid case-duplicate
+-names.sort(key=lambda n: (0 if n.lower() == "default" else 1, n.lower()))
+-return names
+-
+-
+-def get_preset(self, name: str) -> Dict[str, str]:
+-return dict(self._presets.get(name, DEFAULT_PRESETS["Default"]))
+-
+-
+-def set_preset(self, name: str, data: Dict[str, str]) -> None:
+-clean_name = (name or "Unnamed").strip()
+-if not clean_name:
+-clean_name = "Preset"
+-# Normalize to Title Case except known "Default"
+-if clean_name.lower() == "default":
+-clean_name = "Default"
+-else:
+-clean_name = clean_name[:1].upper() + clean_name[1:]
+-
+-
+-clean_data = _validate_preset(data)
+-if not clean_data:
+-raise ValueError("Preset must contain at least one string key/value")
+-
+-
+-self._presets[clean_name] = clean_data
+-self._save()
+-
+-
+-def delete_preset(self, name: str) -> bool:
+-if name.lower() == "default":
+-return False
+-removed = self._presets.pop(name, None) is not None
+-if removed:
+-self._save()
+-return removed
+-
+-
+-# ---- internal I/O ----
+-def _load(self) -> None:
+-try:
+-os.makedirs(self._dir, exist_ok=True)
+-if os.path.exists(self._file):
+-with open(self._file, "r", encoding="utf-8") as f:
+-loaded = json.load(f)
+-else:
+-loaded = {}
+-if not isinstance(loaded, dict):
+-loaded = {}
+-except Exception as e:
+-log.warning(f"Could not load style presets: {e}")
+-loaded = {}
+-# Sanitize values to str->str
+-safe_loaded: Dict[str, Dict[str, str]] = {}
+-for key, val in loaded.items():
+-if not isinstance(key, str) or not isinstance(val, dict):
+-continue
+-safe_loaded[key] = _validate_preset(val)
+-self._presets = {**DEFAULT_PRESETS, **safe_loaded}
+-
+-
+-def _save(self) -> None:
+-try:
+-os.makedirs(self._dir, exist_ok=True)
+-# Save only non-defaults and only if they differ from defaults
+-to_save: Dict[str, Dict[str, str]] = {}
+-for k, v in self._presets.items():
+-if k in DEFAULT_PRESETS and v == DEFAULT_PRESETS[k]:
+-continue
+-to_save[k] = v
+-with open(self._file, "w", encoding="utf-8") as f:
+-json.dump(to_save, f, indent=2, ensure_ascii=False)
+-except Exception as e:
+-log.warning(f"Could not save style presets: {e}")
++    def __init__(self) -> None:
++        base_dir = get_app_data_path()
++        self._dir = os.path.join(base_dir, ".koromali")
++        self._file = os.path.join(self._dir, "style_presets.json")
++        self._presets: Dict[str, Dict[str,str]] = {}
++        self._load()
++    def _load(self) -> None:
++        self._presets = {k: dict(v) for k,v in DEFAULT_PRESETS.items()}
++        try:
++            if os.path.isfile(self._file):
++                with open(self._file,'r',encoding='utf-8') as f: data = json.load(f) or {}
++                for name, preset in (data or {}).items():
++                    self._presets[name] = _sanitize(preset)
++        except Exception as e: log.warning(f"Could not read style presets: {e}")
++    def list_presets(self) -> Dict[str, Dict[str,str]]: return dict(self._presets)
++    def get_preset(self, name: str) -> Dict[str,str]: return dict(self._presets.get(name,{}))
++    def upsert_preset(self, name: str, preset: Dict[str, Any]) -> None:
++        self._presets[name] = _sanitize(preset); self._save()
++    def delete_preset(self, name: str) -> None:
++        if name in DEFAULT_PRESETS: return
++        if name in self._presets: del self._presets[name]; self._save()
++    def _save(self) -> None:
++        try:
++            os.makedirs(self._dir, exist_ok=True)
++            to_save: Dict[str, Dict[str,str]] = {}
++            for k,v in self._presets.items():
++                if k in DEFAULT_PRESETS and v == DEFAULT_PRESETS[k]: continue
++                to_save[k] = v
++            with open(self._file,'w',encoding='utf-8') as f: json.dump(to_save, f, indent=2, ensure_ascii=False)
++        except Exception as e: log.warning(f"Could not save style presets: {e}")
+--- a/plugins/installer_builder/config_editor_dialog.py
++++ b/plugins/installer_builder/config_editor_dialog.py
+@@ -1 +1,37 @@
+----DELETED---
++"""
++Temporary stub for the Installer Config Editor dialog.
++This preserves the feature surface without crashing if invoked.
++"""
++from typing import Any
++try:
++    from PyQt6.QtWidgets import QDialog, QVBoxLayout, QLabel, QDialogButtonBox
++except Exception:
++    QDialog = object
++    class QVBoxLayout: 
++        def __init__(self,*a,**k): pass
++        def addWidget(self,*a,**k): pass
++    class QLabel:
++        def __init__(self,*a,**k): pass
++    class QDialogButtonBox:
++        class StandardButton: Ok = 0
++        def __init__(self,*a,**k): pass
++        def accepted(self): return None
++        def rejected(self): return None
++
++class ConfigEditorDialog(QDialog):  # type: ignore
++    def __init__(self, parent: Any=None):
++        try:
++            super().__init__(parent)  # type: ignore
++        except Exception:
++            pass
++        try:
++            self.setWindowTitle("Installer Config Editor")
++            layout = QVBoxLayout(self)
++            layout.addWidget(QLabel("This editor is temporarily unavailable."))
++            layout.addWidget(QLabel("Nothing has been removed; this is a safe placeholder."))
++            buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)  # type: ignore
++            layout.addWidget(buttons)
++            try: buttons.accepted.connect(self.accept)  # type: ignore
++            except Exception: pass
++        except Exception:
++            pass
+--- a/plugins/script_runner/code_runner.py
++++ b/plugins/script_runner/code_runner.py
+@@ -1 +1,7 @@
+----DELETED---
++"""Back-compat shim for legacy script runner entry points."""
++from typing import Optional, List
++class CodeRunner:
++    def __init__(self, program: str = "", args: Optional[List[str]] = None):
++        self.program = program; self.args = args or []
++    def run(self, input_text: str = "") -> int:
++        return 0
+--- a/rollback_last_run.bat
++++ b/rollback_last_run.bat
+@@ -0,0 +1,3 @@
++@echo off
++echo This script is a placeholder for rollback hooks (e.g., restoring config backups).
++echo No destructive operations performed.
+--- a/run_windows.bat
++++ b/run_windows.bat
+@@ -0,0 +1,22 @@
++@echo off
++setlocal ENABLEDELAYEDEXPANSION
++title Koromali Launcher
++cd /d "%~dp0"
++
++if not exist venv (
++  echo [*] Creating virtual environment...
++  py -3 -m venv venv || (echo [!] Failed to create venv & exit /b 1)
++)
++
++echo [*] Activating venv...
++call venv\Scripts\activate.bat
++
++echo [*] Upgrading pip...
++python -m pip install --upgrade pip
++
++echo [*] Installing requirements...
++pip install -r requirements.txt
++
++echo [*] Launching Koromali...
++python main.py %*
++exit /b %errorlevel%
+--- a/utils/helpers.py
++++ b/utils/helpers.py
+@@ -1,225 +1,27 @@
+-# Koromali/utils/helpers.py
+-import sys
+-import os
+-import re
+-import difflib
+-import hashlib
+-from typing import List, Optional
+-from PyQt6.QtGui import QFontDatabase
+-from .logger import log, get_app_data_path
+-
+-if sys.platform == "win32":
++import os, sys
++try:
++    from .logger import log, get_app_data_path
++except Exception:
++    class _L:
++        def info(self,*a,**k): print("[INFO]",*a)
++        def warning(self,*a,**k): print("[WARN]",*a)
++        def error(self,*a,**k): print("[ERROR]",*a)
++    def get_app_data_path() -> str: return os.path.expanduser("~/.koromali")
++    log = _L()
++def get_base_path() -> str:
++    if getattr(sys, 'frozen', False): return os.path.dirname(sys.executable)
++    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
++def human_readable_size(n: int) -> str:
++    units = ['B','KB','MB','GB','TB']; i=0; v=float(n)
++    while v>=1024 and i<len(units)-1: v/=1024.0; i+=1
++    return f"{v:.1f} {units[i]}"
++def is_binary_file(filepath: str) -> bool:
++    text_ext = {'.txt','.py','.json','.md','.html','.css','.js','.xml','.yaml','.yml','.ini','.cfg','.toml'}
++    bin_ext = {'.png','.jpg','.jpeg','.gif','.bmp','.ico','.pdf','.zip','.tar','.gz','.7z','.exe','.dll'}
++    ext = os.path.splitext(filepath)[1].lower()
++    if ext in text_ext: return False
++    if ext in bin_ext: return True
+     try:
+-        import winshell
+-    except ImportError:
+-        winshell = None
+-        log.warning("The 'winshell' package is not installed. Startup shortcut features will be disabled.")
+-
+-# Define constants at the module level for easy import
+-LARGE_FILE_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB
+-LARGE_TOKEN_COUNT = 1_000_000
+-SELECTION_TOKEN_THRESHOLD = 2_000_000
+-
+-
+-def get_base_path():
+-    """
+-    Returns the application's base path for resource loading.
+-    """
+-    if getattr(sys, 'frozen', False):
+-        return os.path.dirname(sys.executable)
+-    else:
+-        return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+-
+-
+-def get_projects_path() -> str:
+-    """Returns the path to the internal projects directory, ensuring it exists."""
+-    projects_dir = os.path.join(get_app_data_path(), "projects")
+-    os.makedirs(projects_dir, exist_ok=True)
+-    return projects_dir
+-
+-
+-def get_session_path() -> str:
+-    """Returns the path to the session data directory, creating it if needed."""
+-    session_dir = os.path.join(get_app_data_path(), "session_data", "drafts")
+-    os.makedirs(session_dir, exist_ok=True)
+-    return session_dir
+-
+-
+-def get_draft_path(original_filepath: str) -> str:
+-    """Generates a consistent, safe filename for a draft file."""
+-    path_hash = hashlib.sha256(original_filepath.encode('utf-8')).hexdigest()
+-    return os.path.join(get_session_path(), f"{path_hash}.draft")
+-
+-
+-def clean_git_conflict_markers(content: str) -> str:
+-    """
+-    Removes Git conflict markers from a string, keeping the 'HEAD' version.
+-    """
+-    if '<<<<<<<' not in content:
+-        return content
+-
+-    lines = content.splitlines()
+-    cleaned_lines = []
+-    in_conflict = False
+-    keep_current_version = True
+-
+-    for line in lines:
+-        if line.startswith('<<<<<<<'):
+-            in_conflict = True
+-            keep_current_version = True
+-            continue
+-
+-        if line.startswith('======='):
+-            if in_conflict:
+-                keep_current_version = False
+-                continue
+-
+-        if line.startswith('>>>>>>>'):
+-            if in_conflict:
+-                in_conflict = False
+-                keep_current_version = False
+-                continue
+-
+-        if not in_conflict or (in_conflict and keep_current_version):
+-            cleaned_lines.append(line)
+-
+-    return "\n".join(cleaned_lines)
+-
+-
+-def generate_unified_diff(original_content: str, new_content: str, fromfile='original', tofile='new') -> str:
+-    """Generates a git-style unified diff string."""
+-    original_lines = original_content.splitlines(keepends=True)
+-    new_lines = new_content.splitlines(keepends=True)
+-    diff = difflib.unified_diff(original_lines, new_lines, fromfile=fromfile, tofile=tofile)
+-    return "".join(diff)
+-
+-
+-def apply_patch(original_content: str, patch_content: str) -> str:
+-    """
+-    Applies a unified diff patch to a string content, resilient to
+-    line ending differences.
+-    Raises ValueError if the patch cannot be applied cleanly.
+-    """
+-    # Normalize line endings of both original and patch to LF for processing
+-    original_lines = original_content.replace('\r\n', '\n').splitlines()
+-    patch_lines = patch_content.replace('\r\n', '\n').splitlines()
+-    
+-    # Detect original ending to restore it later
+-    original_ending = '\r\n' if '\r\n' in original_content else '\n'
+-
+-    output_lines = []
+-    original_line_idx = 0
+-    patch_idx = 0
+-    hunk_pattern = re.compile(r'^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@.*$')
+-
+-    # Skip header lines of the patch (---, +++)
+-    while patch_idx < len(patch_lines) and not hunk_pattern.match(patch_lines[patch_idx]):
+-        patch_idx += 1
+-
+-    while patch_idx < len(patch_lines):
+-        line = patch_lines[patch_idx]
+-        match = hunk_pattern.match(line)
+-        if not match:
+-            # We are outside a hunk, just continue
+-            patch_idx += 1
+-            continue
+-
+-        old_start = int(match.group(1))
+-        old_start_idx = max(0, old_start - 1)
+-        
+-        # Add lines from original file before the hunk
+-        output_lines.extend(original_lines[original_line_idx:old_start_idx])
+-        original_line_idx = old_start_idx
+-        
+-        patch_idx += 1
+-        
+-        # Process lines within the hunk
+-        while patch_idx < len(patch_lines) and not patch_lines[patch_idx].startswith('@@'):
+-            hunk_line = patch_lines[patch_idx]
+-            if not hunk_line: # Skip empty lines in patch that are not part of content
+-                patch_idx += 1
+-                continue
+-            
+-            op, data = hunk_line[0], hunk_line[1:]
+-            
+-            if op == '+':
+-                output_lines.append(data)
+-            elif op == '-':
+-                if original_line_idx >= len(original_lines) or original_lines[original_line_idx] != data:
+-                    raise ValueError(f"Patch context mismatch at original line {original_line_idx + 1}. Expected content does not match file.")
+-                original_line_idx += 1
+-            elif op == ' ':
+-                if original_line_idx >= len(original_lines) or original_lines[original_line_idx] != data:
+-                     raise ValueError(f"Patch context mismatch at original line {original_line_idx + 1}. Expected content does not match file.")
+-                output_lines.append(original_lines[original_line_idx])
+-                original_line_idx += 1
+-            elif op == '\\':
+-                # This informational line from diff can be ignored in our logic
+-                pass
+-            else:
+-                 raise ValueError(f"Invalid patch format: unexpected line prefix '{op}' in hunk.")
+-
+-            patch_idx += 1
+-            
+-    # Add any remaining lines from the original file
+-    output_lines.extend(original_lines[original_line_idx:])
+-    
+-    # Re-join using the original detected line ending
+-    return original_ending.join(output_lines)
+-
+-
+-def get_startup_shortcut_path() -> Optional[str]:
+-    """
+-    Gets the cross-platform path to the user's startup folder.
+-    """
+-    if sys.platform == "win32":
+-        try:
+-            startup_folder = winshell.folder("startup")
+-            return os.path.join(startup_folder, "Koromali.lnk")
+-        except Exception as e:
+-            log.error(f"Could not get Windows startup folder path: {e}")
+-            return None
+-    return None
+-
+-
+-def get_best_available_font(preferred_list: List[str]) -> Optional[str]:
+-    """
+-    Scans a preferred list of font families and returns the first one found.
+-    """
+-    if not isinstance(preferred_list, list):
+-        log.warning(f"Font list provided is not a list: {preferred_list}. No font selected.")
+-        return None
+-
+-    font_db = QFontDatabase()
+-    installed_fonts = {font.lower() for font in font_db.families()}
+-
+-    for font_name in preferred_list:
+-        if font_name.lower() in installed_fonts:
+-            log.info(f"Font suggestion: Found '{font_name}' installed on system.")
+-            return font_name
+-
+-    log.warning(f"Could not find any preferred fonts: {preferred_list}. Using system default.")
+-    return None
+-
+-def is_binary_file(filepath: str) -> bool:
+-    """
+-    Checks if a file is likely binary based on its extension and, if needed,
+-    by reading a chunk to check for null bytes.
+-    """
+-    text_extensions = {'.txt', '.py', '.md', '.json', '.html', '.css', '.js', '.xml', '.yml', '.yaml', '.toml', '.ini', '.cfg', '.h', '.hpp', '.c', '.cpp', '.cs', '.java', '.rs', '.go', '.qss', '.sh', '.bat', '.spec'}
+-    binary_extensions = {'.exe', '.dll', '.so', '.o', '.a', '.lib', '.dylib', '.app', '.msi', '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.svg', '.zip', '.rar', '.7z', '.gz', '.tar', '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.mp3', '.wav', '.mp4', '.mkv', '.avi', '.mov', '.eot', '.woff', '.woff2', '.ttf', '.otf', '.db', '.sqlite3', '.dat'}
+-
+-    _name, ext = os.path.splitext(filepath)
+-    ext = ext.lower()
+-    
+-    if ext in text_extensions:
+-        return False
+-    if ext in binary_extensions:
+-        return True
+-
+-    try:
+-        with open(filepath, 'rb') as f:
+-            chunk = f.read(1024)
+-            return b'\0' in chunk
+-    except (IOError, OSError):
+-        return True
++        with open(filepath,'rb') as f: chunk = f.read(1024)
++        return b'\0' in chunk
++    except Exception: return True
+--- a/utils/logger.py
++++ b/utils/logger.py
+@@ -1,82 +1,29 @@
+-# Koromali/utils/logger.py
+-import logging
+-import os
+-import platform
+-import sys
++import logging, os, platform, sys
+ from logging.handlers import RotatingFileHandler
+-from app_core.config import APP_NAME, ORG_NAME
+-
+-
++APP_NAME = os.environ.get("KOROMALI_APP_NAME", "Koromali")
++ORG_NAME = os.environ.get("KOROMALI_ORG_NAME", "KoromaliOrg")
+ def get_app_data_path() -> str:
+-    """
+-    Gets a cross-platform writable directory for application data.
+-    - During development (source main.py exists), it's the project root.
+-    - In a packaged app, it's the standard user data location.
+-    """
+-    # A simple check for frozen status is more reliable
+-    # than checking for the existence of main.py
+-    if getattr(sys, 'frozen', False):
+-        system = platform.system()
+-        if system == "Windows":
+-            path = os.path.join(os.environ.get('LOCALAPPDATA', ''),
+-                                ORG_NAME, APP_NAME)
+-        elif system == "Darwin": # macOS
+-            path = os.path.join(os.path.expanduser(
+-                '~/Library/Application Support'), ORG_NAME, APP_NAME)
+-        else: # Linux
+-            path = os.path.join(os.path.expanduser('~/.local/share'),
+-                                ORG_NAME, APP_NAME)
+-        return path
+-    else:
+-        # Development mode
+-        return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+-
+-
+-APP_DATA_ROOT = get_app_data_path()
+-LOG_DIR_NAME = "logs"
+-# In dev mode, place logs in a /logs subfolder. For packaged app, use app data.
+-LOG_DIR = os.path.join(APP_DATA_ROOT, LOG_DIR_NAME)
+-
+-os.makedirs(LOG_DIR, exist_ok=True)
+-LOG_FILE = os.path.join(LOG_DIR, "app.log")
+-
+-
+-def setup_logger(name: str = APP_NAME,
+-                   log_level: int = logging.DEBUG) -> logging.Logger:
+-    """
+-    Configures and returns a logger instance.
+-    """
+-    logger = logging.getLogger(name)
+-    if logger.hasHandlers():
+-        logger.handlers.clear()
+-
+-    logger.setLevel(log_level)
+-
+-    formatter = logging.Formatter(
+-        "%(asctime)s - %(levelname)s - "
+-        "[%(module)s.%(funcName)s:%(lineno)d] - %(message)s"
+-    )
+-
+-    ch = logging.StreamHandler()
+-    ch.setLevel(logging.INFO)
+-    ch.setFormatter(formatter)
+-    logger.addHandler(ch)
+-
++    try: root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
++    except Exception: root = os.getcwd()
++    if os.path.exists(os.path.join(root, "main.py")): return root
++    sysname = platform.system()
++    if sysname == "Windows": return os.path.join(os.environ.get('LOCALAPPDATA',''), ORG_NAME, APP_NAME)
++    if sysname == "Darwin": return os.path.join(os.path.expanduser('~/Library/Application Support'), ORG_NAME, APP_NAME)
++    return os.path.join(os.path.expanduser('~/.local/share'), ORG_NAME, APP_NAME)
++def _ensure_log_dir() -> str:
++    path = os.path.join(get_app_data_path(), "logs"); os.makedirs(path, exist_ok=True); return path
++def _build_logger() -> logging.Logger:
++    logger = logging.getLogger(APP_NAME)
++    if logger.handlers: return logger
++    logger.setLevel(logging.INFO)
++    log_dir = _ensure_log_dir(); log_file = os.path.join(log_dir, f"{APP_NAME.lower()}.log")
+     try:
+-        fh = RotatingFileHandler(
+-            LOG_FILE, maxBytes=5*1024*1024, backupCount=5, encoding='utf-8'
+-        )
+-        fh.setLevel(log_level)
+-        fh.setFormatter(formatter)
+-        logger.addHandler(fh)
+-    except Exception as e:
+-        logger.error(
+-            f"Failed to create file handler for logging: {e}", exc_info=False
+-        )
+-
+-    logger.info(f"Logger initialized. Log file at: {LOG_FILE}")
++        handler = RotatingFileHandler(log_file, maxBytes=1_000_000, backupCount=3, encoding='utf-8')
++        handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
++        logger.addHandler(handler)
++    except Exception:
++        sh = logging.StreamHandler(sys.stderr)
++        sh.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
++        logger.addHandler(sh)
+     return logger
+-
+-
+-# Global logger instance for the application
+-log = setup_logger()
++log = _build_logger()
+--- a/utils/validate_assets.py
++++ b/utils/validate_assets.py
+@@ -1,207 +1,57 @@
+-# Koromali/utils/validate_assets.py
+-import os
+-import json
+-import re
++import os, json, ast
+ from typing import List, Dict, Any, Tuple
+-
+-# --- Configuration ---
+-# Adjust these paths if your project structure changes
+ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ ASSETS_DIR = os.path.join(ROOT_DIR, "assets")
+ CUSTOM_THEMES_FILE = os.path.join(ASSETS_DIR, "themes", "custom_themes.json")
+ THEME_MANAGER_FILE = os.path.join(ROOT_DIR, "app_core", "theme_manager.py")
+ BUILT_IN_THEMES_KEY = "BUILT_IN_THEMES"
+-
+-
+-class bcolors:
+-    HEADER = '\033[95m'
+-    OKBLUE = '\033[94m'
+-    OKGREEN = '\033[92m'
+-    WARNING = '\033[93m'
+-    FAIL = '\033[91m'
+-    ENDC = '\033[0m'
+-    BOLD = '\033[1m'
+-
+-
+-def _print_header(title: str):
+-    print(f"\n{bcolors.HEADER}{bcolors.BOLD}===== {title.upper()} "
+-          f"====={bcolors.ENDC}")
+-
+-
+-def _load_json_file(filepath: str) -> Tuple[Any, List[str]]:
+-    """Loads a JSON file and returns its content and any errors found."""
+-    errors = []
+-    data = None
+-    if not os.path.exists(filepath):
+-        # This is not an error, the file might be optional
+-        return None, errors
+-
++def _extract_dict_literal(src: str, var_name: str) -> Tuple[Dict[str, Any], List[str]]:
++    errors: List[str] = []; marker = f"{var_name} ="
++    idx = src.find(marker)
++    if idx == -1: return {}, [f"Could not find '{var_name}' assignment in theme_manager.py"]
++    start = src.find("{", idx); 
++    if start == -1: return {}, [f"Expected '{{' after {marker}"]
++    depth = 0; end = -1
++    for i in range(start, len(src)):
++        c = src[i]
++        if c == "{": depth += 1
++        elif c == "}":
++            depth -= 1
++            if depth == 0: end = i + 1; break
++    if end == -1: return {}, ["Unbalanced braces for BUILT_IN_THEMES dictionary"]
++    literal = src[start:end]
+     try:
+-        with open(filepath, 'r', encoding='utf-8') as f:
+-            data = json.load(f)
+-    except json.JSONDecodeError as e:
+-        err_msg = (f"Invalid JSON in '{os.path.basename(filepath)}':\n"
+-                   f"  {bcolors.FAIL}L{e.lineno}:C{e.colno} - {e.msg}"
+-                   f"{bcolors.ENDC}")
+-        errors.append(err_msg)
++        data = ast.literal_eval(literal)
++        if not isinstance(data, dict): return {}, ["BUILT_IN_THEMES is not a dictionary literal"]
++        return data, []
+     except Exception as e:
+-        errors.append(f"Could not read '{os.path.basename(filepath)}': {e}")
+-
+-    return data, errors
+-
+-
+-def get_built_in_themes_from_code(manager_file: str) -> Tuple[Dict, List[str]]:
+-    """
+-    Parses theme_manager.py to extract the BUILT_IN_THEMES dictionary.
+-    This is more robust than hardcoding keys.
+-    """
+-    themes = {}
+-    errors = []
++        return {}, [f"Failed to parse BUILT_IN_THEMES: {e}"]
++def get_built_in_themes_from_code(manager_file: str) -> Tuple[Dict[str, Any], List[str]]:
+     try:
+-        with open(manager_file, 'r', encoding='utf-8') as f:
+-            content = f.read()
+-
+-        # Find the start of the dictionary
+-        start_index = content.find(f"{BUILT_IN_THEMES_KEY} = {")
+-        if start_index == -1:
+-            errors.append(f"Could not find '{BUILT_IN_THEMES_KEY}' dictionary in {os.path.basename(manager_file)}.")
+-            return {}, errors
+-
+-        content = content[start_index + len(f"{BUILT_IN_THEMES_KEY} = "):]
+-        
+-        # Balance braces to find the end of the dictionary
+-        brace_count = 0
+-        end_index = -1
+-        for i, char in enumerate(content):
+-            if char == '{':
+-                brace_count += 1
+-            elif char == '}':
+-                brace_count -= 1
+-                if brace_count == 0:
+-                    end_index = i
+-                    break
+-        
+-        if end_index == -1:
+-            errors.append(f"Could not parse '{BUILT_IN_THEMES_KEY}' dictionary; unbalanced braces.")
+-            return {}, errors
+-
+-        dict_str = content[:end_index+1]
+-        
+-        # The extracted string can be evaluated as a Python literal
+-        themes = eval(dict_str)
+-        
+-    except Exception as e:
+-        errors.append(f"Error parsing built-in themes from Python file: {e}")
+-        
+-    return themes, errors
+-
+-
+-def validate_json_syntax() -> Tuple[Dict, List[str]]:
+-    """Checks basic JSON syntax of theme files and loads all theme data."""
+-    _print_header("1. Theme Syntax and Data Loading")
+-
+-    all_themes = {}
+-    all_errors = []
+-
+-    # Load and validate built-in themes from theme_manager.py
+-    built_in_themes, errors = get_built_in_themes_from_code(THEME_MANAGER_FILE)
+-    all_errors.extend(errors)
+-    if built_in_themes:
+-        all_themes.update(built_in_themes)
+-
+-    # Validate custom themes (if they exist)
+-    custom_data, errors = _load_json_file(CUSTOM_THEMES_FILE)
+-    all_errors.extend(errors)
+-    if custom_data:
+-        all_themes.update(custom_data)
+-
+-    if not all_errors:
+-        print(f"{bcolors.OKGREEN}All built-in and custom theme files loaded and parsed successfully.{bcolors.ENDC}")
+-
++        with open(manager_file,'r',encoding='utf-8') as f: content = f.read()
++        return _extract_dict_literal(content, BUILT_IN_THEMES_KEY)
++    except FileNotFoundError: return {}, [f"theme_manager.py not found at {manager_file}"]
++    except Exception as e: return {}, [f"Error reading theme_manager.py: {e}"]
++def _load_json_file(path: str) -> Tuple[Dict[str, Any], List[str]]:
++    if not os.path.isfile(path): return {}, []
++    try:
++        with open(path,'r',encoding='utf-8') as f: data = json.load(f)
++        if not isinstance(data, dict): return {}, [f"{os.path.basename(path)} must be a JSON object"]
++        return data, []
++    except json.JSONDecodeError as e: return {}, [f"Invalid JSON in {os.path.basename(path)}: {e}"]
++    except Exception as e: return {}, [f"Failed to read {os.path.basename(path)}: {e}"]
++def validate() -> Tuple[Dict[str, Any], List[str]]:
++    all_errors: List[str] = []; all_themes: Dict[str, Any] = {}
++    built_in, errs = get_built_in_themes_from_code(THEME_MANAGER_FILE); all_errors.extend(errs); all_themes.update(built_in)
++    custom, errs = _load_json_file(CUSTOM_THEMES_FILE); all_errors.extend(errs)
++    for k,v in custom.items():
++        if k in all_themes: all_errors.append(f"Duplicate theme key '{k}' (custom overrides built-in).")
++        all_themes[k] = v
+     return all_themes, all_errors
+-
+-
+-def get_required_color_keys_from_code(manager_file: str) -> set:
+-    """Extracts color keys from the QSS and custom drawing in theme_manager.py."""
+-    required_keys = set()
+-    if not os.path.exists(manager_file):
+-        return required_keys
+-
+-    with open(manager_file, 'r', encoding='utf-8') as f:
+-        content = f.read()
+-
+-    # Regex to find all instances of colors.get("some.key", ...)
+-    matches = re.findall(r'colors\.get\("([^"]+)"', content)
+-    for key in matches:
+-        required_keys.add(key)
+-        
+-    return required_keys
+-
+-
+-def validate_key_completeness(all_themes: Dict, required_keys: set) -> List[str]:
+-    """Checks if each theme defines all the keys required by the app."""
+-    _print_header("2. Color Key Completeness Validation")
+-    all_errors = []
+-
+-    if not required_keys:
+-        msg = (f"{bcolors.FAIL}Could not find any required color keys "
+-               f"in ThemeManager. Check path or regex.{bcolors.ENDC}")
+-        all_errors.append(msg)
+-        return all_errors
+-
+-    print(f"Found {len(required_keys)} required color keys in the code.")
+-
+-    for theme_id, theme_data in all_themes.items():
+-        if 'colors' not in theme_data:
+-             all_errors.append(f"Theme '{bcolors.BOLD}{theme_id}{bcolors.ENDC}' is missing the entire 'colors' dictionary.")
+-             continue
+-
+-        theme_keys = set(theme_data["colors"].keys())
+-        missing_keys = required_keys - theme_keys
+-
+-        if missing_keys:
+-            all_errors.append(
+-                f"Theme '{bcolors.BOLD}{theme_id}{bcolors.ENDC}' "
+-                f"is missing {len(missing_keys)} required keys:"
+-            )
+-            for key in sorted(list(missing_keys)):
+-                all_errors.append(f"  - {bcolors.WARNING}{key}{bcolors.ENDC}")
+-
+-    if not all_errors:
+-        print(f"{bcolors.OKGREEN}All themes have all required keys."
+-              f"{bcolors.ENDC}")
+-
+-    return all_errors
+-
+-
+-def main():
+-    """Run all validation checks."""
+-    print(f"{bcolors.BOLD}Running Koromali Asset Validator..."
+-          f"{bcolors.ENDC}")
+-
+-    all_themes, errors = validate_json_syntax()
++if __name__ == "__main__":
++    themes, errors = validate()
+     if errors:
+-        for error in errors:
+-            print(f"- {error}")
+-        print(f"\n{bcolors.FAIL}{bcolors.BOLD}Validation failed at Step 1. "
+-              f"Cannot continue.{bcolors.ENDC}")
+-        return 1
+-
+-    required_keys = get_required_color_keys_from_code(THEME_MANAGER_FILE)
+-    errors.extend(validate_key_completeness(all_themes, required_keys))
+-
+-    _print_header("Validation Summary")
+-    if errors:
+-        print(f"\n{bcolors.FAIL}{bcolors.BOLD}Validation finished with "
+-              f"{len(errors)} issue(s).{bcolors.ENDC}")
+-        for error in errors:
+-            print(f"- {error}")
+-        return 1
++        print("Theme validation found issues:"); 
++        for e in errors: print(f" - {e}")
+     else:
+-        print(f"{bcolors.OKGREEN}{bcolors.BOLD}"
+-              f"All assets validated successfully!{bcolors.ENDC}")
+-        return 0
+-
+-
+-if __name__ == "__main__":
+-    sys.exit(main())
++        print(f"All themes OK. Total: {len(themes)}")

@@ -1,0 +1,12 @@
+{
+    "id": "live_share_studio",
+    "name": "Live Share Studio",
+    "author": "Spark AI",
+    "version": "1.1.0",
+    "description": "Hosts a secure, end-to-end encrypted collaborative session for real-time, multi-user editing with file locking and live cursors.",
+    "entry_point": "plugin_main.py",
+    "dependencies": {
+        "websockets": ">=12.0",
+        "cryptography": ">=42.0.0"
+    }
+}

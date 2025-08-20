@@ -1,0 +1,29 @@
+{
+    "id": "load_game_menu",
+    "elements": [
+        {
+            "type": "Label",
+            "id": "title_label",
+            "rect": ["center", 100, "100%", "80px"],
+            "text": "Load Chronicle",
+            "style": "title_label"
+        },
+        {
+            "type": "DynamicListPanel",
+            "id": "save_list_panel",
+            "rect": ["center", 200, "80%", "100% - 300"],
+            "data_source": "save_files",
+            "element_template": {
+                "type": "Button",
+                "height": "50px",
+                "margin_y": 10
+            }
+        },
+        {
+            "type": "Button",
+            "rect": ["center", "bottom-50", "200px", "50px"],
+            "text": "Back",
+            "action": "back_to_main"
+        }
+    ]
+}

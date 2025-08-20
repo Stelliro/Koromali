@@ -1,10 +1,10 @@
-# PuffinPyEditor/plugins/ai_quick_actions/plugin_main.py
+# Koromali/plugins/ai_quick_actions/plugin_main.py
 from functools import partial
 from PyQt6.QtWidgets import QMessageBox
 from PyQt6.QtCore import QObject, QRunnable, QThreadPool, pyqtSignal
-from app_core.puffin_api import PuffinPluginAPI
-from plugins.ai_tools.api_client import ApiClient
-from plugins.ai_tools.ai_response_dialog import AIResponseDialog
+from app_core.koromali_api import KoromaliPluginAPI
+from plugins.ai_suite.api_client import ApiClient
+from plugins.ai_suite.ai_response_dialog import AIResponseDialog
 
 class AIWorker(QRunnable):
     class Signals(QObject):
@@ -24,12 +24,18 @@ class AIWorker(QRunnable):
 class AIQuickActionsPlugin:
     ACTIONS = [{"name": "Explain this code", "icon": "fa5s.question-circle", "system": "You are an expert developer. Explain the following code snippet clearly and concisely. Describe its purpose, inputs, and outputs.", "user": "Please explain this code:\n\n```python\n{selected_code}\n```"}, {"name": "Suggest a refactoring", "icon": "fa5s.magic", "system": "You are a senior developer focused on writing clean, efficient, and maintainable Python code. Refactor the following code snippet, explaining the key improvements you made.", "user": "Please refactor this code:\n\n```python\n{selected_code}\n```"}, {"name": "Find potential bugs", "icon": "fa5s.bug", "system": "You are a quality assurance expert. Analyze the following code for potential bugs, logical errors, or edge cases that might not be handled correctly.", "user": "Please find potential bugs in this code:\n\n```python\n{selected_code}\n```"}]
 
-    def __init__(self, puffin_api: PuffinPluginAPI):
-        self.api = puffin_api
+    def __init__(self, koromali_api: KoromaliPluginAPI):
+        self.api = koromali_api
         self.main_window = self.api.get_main_window()
         settings = self.api.get_manager("settings")
         self.api_client = ApiClient(settings)
         self.thread_pool = QThreadPool()
+
+        # Create a dedicated "AI" menu if it doesn't exist
+        ai_menu = self.api.get_menu("ai")
+        if not ai_menu:
+            ai_menu = self.main_window.menuBar().addMenu("AI")
+            setattr(self.main_window, "ai_menu", ai_menu)
 
         for config in self.ACTIONS:
             self.api.add_menu_action(
@@ -52,7 +58,7 @@ class AIQuickActionsPlugin:
                                 f"API Key for {provider} not found. Please add it via Tools -> Manage API Keys...")
             return
 
-        model = self.api_client.PROVIDER_CONFIG.get(provider, {}).get("models", [])[0]
+        model = self.api_client.PROVIDER_CONFIG.get(provider, {}).get("models", [])
         self.api.show_status_message(f"Sending selection to {model}...")
         worker = AIWorker(self.api_client, provider, model, config["system"], config["user"].format(selected_code=text))
         worker.signals.finished.connect(self._on_action_finished)
@@ -66,5 +72,5 @@ class AIQuickActionsPlugin:
         else:
             QMessageBox.critical(self.main_window, "API Error", response)
 
-def initialize(puffin_api: PuffinPluginAPI):
-    return AIQuickActionsPlugin(puffin_api)
+def initialize(koromali_api: KoromaliPluginAPI):
+    return AIQuickActionsPlugin(koromali_api)

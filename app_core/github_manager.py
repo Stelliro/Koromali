@@ -1,13 +1,16 @@
-# PuffinPyEditor/app_core/github_manager.py
+# Koromali/app_core/github_manager.py
 import requests
 import time
 import os
 import json
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, TYPE_CHECKING
 from PyQt6.QtCore import QObject, QThread, pyqtSignal
-from .settings_manager import settings_manager
+
 from utils.versioning import APP_VERSION
 from utils.logger import log
+
+if TYPE_CHECKING:
+    from app_core.settings_manager import SettingsManager
 
 CLIENT_ID = "178c6fc778ccc68e1d6a"
 DEVICE_CODE_URL = "https://github.com/login/device/code"
@@ -28,11 +31,12 @@ class GitHubWorker(QObject):
     operation_success = pyqtSignal(str, dict)
     operation_failed = pyqtSignal(str)
 
-    def __init__(self):
+    def __init__(self, settings_manager: "SettingsManager"):
         super().__init__()
-        self.access_token: Optional[str] = settings_manager.get(
+        self.settings_manager = settings_manager
+        self.access_token: Optional[str] = self.settings_manager.get(
             "github_access_token")
-        self.user_agent = f"PuffinPyEditor/{APP_VERSION}"
+        self.user_agent = f"Koromali/{APP_VERSION}"
 
     def _get_headers(self) -> Dict[str, str]:
         """Constructs the standard headers for authenticated API requests."""
@@ -49,7 +53,7 @@ class GitHubWorker(QObject):
                        "User-Agent": self.user_agent}
             payload = {"client_id": CLIENT_ID, "scope": "repo user"}
             response = requests.post(
-                DEVICE_CODE_URL, data=payload, headers=headers, timeout=10
+                DEVICE_CODE_URL, data=payload, headers=headers, timeout=30
             )
             response.raise_for_status()
             data = response.json()
@@ -74,21 +78,21 @@ class GitHubWorker(QObject):
             try:
                 response = requests.post(
                     ACCESS_TOKEN_URL, data=payload,
-                    headers=headers, timeout=interval + 2
+                    headers=headers, timeout=30
                 )
                 data = response.json()
                 if "access_token" in data:
                     self.access_token = data["access_token"]
                     user_info = self._get_authenticated_user_info()
                     user_login = user_info.get("login") if user_info else "user"
-                    settings_manager.set(
+                    self.settings_manager.set(
                         "github_access_token", self.access_token, False
                     )
-                    settings_manager.set("github_user", user_login, False)
-                    settings_manager.set(
+                    self.settings_manager.set("github_user", user_login, False)
+                    self.settings_manager.set(
                         "github_user_info", user_info, False
                     )
-                    settings_manager.save()
+                    self.settings_manager.save()
                     log.info(
                         "Successfully authenticated as GitHub user: "
                         f"{user_login}"
@@ -118,7 +122,7 @@ class GitHubWorker(QObject):
         try:
             response = requests.get(
                 "https://api.github.com/user",
-                headers=self._get_headers(), timeout=10
+                headers=self._get_headers(), timeout=30
             )
             response.raise_for_status()
             return response.json()
@@ -133,7 +137,7 @@ class GitHubWorker(QObject):
         while True:
             paginated_url = f"{url}?page={page}&per_page=100"
             response = requests.get(
-                paginated_url, headers=self._get_headers(), timeout=15
+                paginated_url, headers=self._get_headers(), timeout=30
             )
             response.raise_for_status()
             data = response.json()
@@ -148,9 +152,7 @@ class GitHubWorker(QObject):
             self.operation_failed.emit("Not logged in to GitHub.")
             return
         try:
-            # Use the paginated helper
             all_repos = self._paginated_request("https://api.github.com/user/repos")
-            # Sort by most recently pushed to
             self.repos_ready.emit(sorted(all_repos, key=lambda r: r.get('pushed_at', ''), reverse=True))
         except requests.RequestException as e:
             self.operation_failed.emit(f"Failed to list repositories: {e}")
@@ -162,7 +164,7 @@ class GitHubWorker(QObject):
         try:
             url = f"https://api.github.com/repos/{full_repo_name}/branches"
             response = requests.get(
-                url, headers=self._get_headers(), timeout=10
+                url, headers=self._get_headers(), timeout=30
             )
             response.raise_for_status()
             self.branches_ready.emit(response.json())
@@ -180,7 +182,7 @@ class GitHubWorker(QObject):
                    "prerelease": prerelease}
         try:
             response = requests.post(
-                url, headers=self._get_headers(), json=payload, timeout=20
+                url, headers=self._get_headers(), json=payload, timeout=30
             )
             response.raise_for_status()
             self.operation_success.emit(
@@ -234,7 +236,7 @@ class GitHubWorker(QObject):
         log.info(f"ROLLBACK: Attempting to delete release at {url}")
         try:
             response = requests.delete(
-                url, headers=self._get_headers(), timeout=20
+                url, headers=self._get_headers(), timeout=30
             )
             response.raise_for_status()
             self.operation_success.emit(
@@ -255,7 +257,7 @@ class GitHubWorker(QObject):
                    "private": is_private}
         try:
             response = requests.post(
-                api_url, headers=self._get_headers(), json=payload, timeout=15
+                api_url, headers=self._get_headers(), json=payload, timeout=30
             )
             response.raise_for_status()
             self.operation_success.emit(
@@ -270,7 +272,7 @@ class GitHubWorker(QObject):
         url = f"https://raw.githubusercontent.com/{repo_path}/main/index.json"
         log.info(f"Fetching plugin index from: {url}")
         try:
-            response = requests.get(url, timeout=15)
+            response = requests.get(url, timeout=30)
             response.raise_for_status()
             self.plugin_index_ready.emit(response.json())
         except requests.RequestException as e:
@@ -287,7 +289,7 @@ class GitHubWorker(QObject):
         payload = {"private": is_private}
         try:
             response = requests.patch(
-                api_url, headers=self._get_headers(), json=payload, timeout=15
+                api_url, headers=self._get_headers(), json=payload, timeout=30
             )
             response.raise_for_status()
             visibility = "private" if is_private else "public"
@@ -299,6 +301,27 @@ class GitHubWorker(QObject):
             error_msg = e.response.json().get('message', str(e)) if hasattr(e, 'response') and e.response else str(e)
             self.operation_failed.emit(
                 f"Failed to change visibility: {error_msg}")
+
+    def update_repo(self, owner: str, repo: str, payload: dict):
+        """Generic method to update a repository using a PATCH request."""
+        if not self.access_token:
+            self.operation_failed.emit("Not logged in to GitHub.")
+            return
+        api_url = f"https://api.github.com/repos/{owner}/{repo}"
+        log.info(f"Sending PATCH to {api_url} with payload: {payload}")
+        try:
+            response = requests.patch(
+                api_url, headers=self._get_headers(), json=payload, timeout=30
+            )
+            response.raise_for_status()
+            new_data = response.json()
+            self.operation_success.emit(
+                "Repository updated.",
+                {"operation": "update", "repo_data": new_data}
+            )
+        except requests.RequestException as e:
+            error_msg = e.response.json().get('message', str(e)) if hasattr(e, 'response') and e.response else str(e)
+            self.operation_failed.emit(f"Failed to update repository: {error_msg}")
 
     def list_repo_tags(self, owner: str, repo: str) -> List[Dict]:
         """Fetches all tags for a repository."""
@@ -314,7 +337,7 @@ class GitHubWorker(QObject):
         """Deletes a tag reference from the remote repository."""
         url = f"https://api.github.com/repos/{owner}/{repo}/git/refs/tags/{tag}"
         try:
-            response = requests.delete(url, headers=self._get_headers(), timeout=10)
+            response = requests.delete(url, headers=self._get_headers(), timeout=30)
             response.raise_for_status()
             log.info(f"Successfully deleted remote tag ref: {tag}")
             return True
@@ -392,16 +415,18 @@ class GitHubManager(QObject):
     _request_create_release = pyqtSignal(str, str, str, str, str, bool)
     _request_upload_asset = pyqtSignal(str, str)
     _request_update_visibility = pyqtSignal(str, str, bool)
+    _request_update_repo = pyqtSignal(str, str, dict)
     _request_plugin_index = pyqtSignal(str)
     _request_delete_release = pyqtSignal(str, str, int)
     _request_cleanup_tags = pyqtSignal(str, str)
 
-    def __init__(self, parent: Optional[QObject] = None):
+    def __init__(self, settings_manager: "SettingsManager", parent: Optional[QObject] = None):
         super().__init__(parent)
+        self.settings_manager = settings_manager
         self.thread = QThread()
-        self.worker = GitHubWorker()
+        self.worker = GitHubWorker(self.settings_manager)
         self.worker.moveToThread(self.thread)
-        self.user_info = settings_manager.get("github_user_info")
+        self.user_info = self.settings_manager.get("github_user_info")
         log.info(f"Loaded stored GitHub user info on startup: "
                  f"{bool(self.user_info)}")
 
@@ -414,6 +439,7 @@ class GitHubManager(QObject):
         self._request_upload_asset.connect(self.worker.upload_release_asset)
         self._request_update_visibility.connect(
             self.worker.update_repo_visibility)
+        self._request_update_repo.connect(self.worker.update_repo)
         self._request_plugin_index.connect(self.worker.fetch_plugin_index)
         self._request_delete_release.connect(self.worker.delete_release)
         self._request_cleanup_tags.connect(self.worker.cleanup_orphaned_tags)
@@ -431,13 +457,13 @@ class GitHubManager(QObject):
         self.thread.start()
 
     def _on_auth_successful(self, username: str):
-        self.user_info = settings_manager.get("github_user_info")
+        self.user_info = self.settings_manager.get("github_user_info")
         log.info(
             f"Authentication successful. Loaded user info for {username}.")
         self.auth_successful.emit(username)
 
     def get_authenticated_user(self) -> Optional[str]:
-        return settings_manager.get("github_user")
+        return self.settings_manager.get("github_user")
 
     def get_user_info(self) -> Optional[Dict]:
         return self.user_info
@@ -450,11 +476,11 @@ class GitHubManager(QObject):
         Returns:
             A dictionary with 'owner' and 'repo' keys, or None if not set.
         """
-        active_repo_id = settings_manager.get("active_update_repo_id")
+        active_repo_id = self.settings_manager.get("active_update_repo_id")
         if not active_repo_id:
             return None
 
-        all_repos = settings_manager.get("source_control_repos", [])
+        all_repos = self.settings_manager.get("source_control_repos", [])
         active_repo_config = next(
             (r for r in all_repos if r.get("id") == active_repo_id), None
         )
@@ -467,10 +493,10 @@ class GitHubManager(QObject):
         self._poll_for_token.emit(device_code, interval, expires_in)
 
     def logout(self):
-        settings_manager.set("github_access_token", None, False)
-        settings_manager.set("github_user", None, False)
-        settings_manager.set("github_user_info", None, False)
-        settings_manager.save()
+        self.settings_manager.set("github_access_token", None, False)
+        self.settings_manager.set("github_user", None, False)
+        self.settings_manager.set("github_user_info", None, False)
+        self.settings_manager.save()
         self.worker.access_token = None
         self.user_info = None
         log.info("Logged out of GitHub and cleared session data.")
@@ -498,6 +524,9 @@ class GitHubManager(QObject):
 
     def update_repo_visibility(self, owner: str, repo: str, is_private: bool):
         self._request_update_visibility.emit(owner, repo, is_private)
+
+    def update_repo(self, owner: str, repo: str, payload: dict):
+        self._request_update_repo.emit(owner, repo, payload)
 
     def fetch_plugin_index(self, repo_path: str):
         self._request_plugin_index.emit(repo_path)

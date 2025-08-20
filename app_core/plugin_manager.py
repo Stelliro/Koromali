@@ -1,4 +1,4 @@
-# PuffinPyEditor/app_core/plugin_manager.py
+# Koromali/app_core/plugin_manager.py
 import os
 import sys
 import json
@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from typing import Dict, Any, Optional, Tuple, List
 from utils.logger import log, get_app_data_path
 from utils.helpers import get_base_path
-from app_core.puffin_api import PuffinPluginAPI  # Import API for type hinting
+from app_core.koromali_api import KoromaliPluginAPI  # Import API for type hinting
 
 try:
     from packaging.version import Version, InvalidVersion
@@ -69,7 +69,7 @@ class PluginManager:
     }
 
     def __init__(self, main_window):
-        self.api: PuffinPluginAPI = main_window.puffin_api
+        self.api: KoromaliPluginAPI = main_window.koromali_api
         base_app_path = get_base_path()
         app_data_path = get_app_data_path()
         self.built_in_plugins_dir = os.path.join(base_app_path, "plugins")
@@ -81,17 +81,27 @@ class PluginManager:
         log.info("PluginManager initialized with a shared API.")
 
     def _ensure_paths_and_packages(self):
-        for path in [get_base_path(), self.user_plugins_directory]:
-            if path not in sys.path:
+        """Ensures all plugin directories are treated as Python packages."""
+        base_path = get_base_path()
+        paths_to_check = [
+            base_path, # Ensure project root is in path
+            self.user_plugins_directory,
+            self.built_in_plugins_dir,
+            self.core_tools_directory
+        ]
+        for path in paths_to_check:
+            if path and path not in sys.path:
                 sys.path.insert(0, path)
                 log.info(f"Added to sys.path: {path}")
+
+        # Ensure user plugins directory exists and is a package
         if not os.path.isdir(self.user_plugins_directory):
             log.info(f"Creating user plugins directory: {self.user_plugins_directory}")
             os.makedirs(self.user_plugins_directory)
         init_path = os.path.join(self.user_plugins_directory, "__init__.py")
         if not os.path.exists(init_path):
             with open(init_path, 'w', encoding='utf-8') as f:
-                f.write("# This file makes the plugins directory a package.\n")
+                f.write("# This file makes the user plugins directory a package.\n")
 
     def discover_and_load_plugins(self, ignore_list: Optional[List[str]] = None):
         log.info("Starting full plugin discovery and loading process...")
@@ -155,57 +165,40 @@ class PluginManager:
 
     def _resolve_dependencies(self) -> List[str]:
         log.info("Resolving plugin dependencies...")
+        all_plugin_ids = set(self.plugins.keys())
         dependencies = {}
         for pid, p in self.plugins.items():
-            deps_field = p.manifest.get('dependencies', [])
-            if isinstance(deps_field, dict):
-                dependencies[pid] = set(deps_field.keys())
-            elif isinstance(deps_field, list):
-                dependencies[pid] = set(deps_field)
-            else:
-                log.warning(f"Plugin '{p.name}' has an invalid 'dependencies' format. Must be an object or array.")
-                dependencies[pid] = set()
+            deps_field = p.manifest.get('dependencies', {})
+            internal_deps = {dep_id: ver for dep_id, ver in deps_field.items() if dep_id in all_plugin_ids}
+            dependencies[pid] = set(internal_deps.keys())
 
         load_order, resolved = [], set()
         while len(load_order) < len(self.plugins):
-            ready = {pid for pid, deps in dependencies.items() if pid not in resolved and not deps - resolved}
-            if not ready:
+            ready_to_load = {pid for pid, deps in dependencies.items() if pid not in resolved and not deps - resolved}
+            if not ready_to_load:
                 unresolved = {pid: deps - resolved for pid, deps in dependencies.items() if pid not in resolved}
                 log.error(f"Could not resolve plugin dependencies. Circular or missing. Unresolved: {unresolved}")
-                for pid, missing in unresolved.items():
+                for pid in unresolved:
                     if pid in self.plugins:
                         self.plugins[pid].enabled = False
-                        self.plugins[pid].status_reason = f"Dependency error: {missing}"
-                break
+                        self.plugins[pid].status_reason = f"Unresolved dependencies: {unresolved[pid]}"
+                resolved.update(unresolved.keys()) # Mark as resolved to break loop
+                continue
 
-            for plugin_id in sorted(list(ready)):
+            for plugin_id in sorted(list(ready_to_load)):
+                # This loop continues from previous logic
                 plugin = self.plugins.get(plugin_id)
-                if not plugin: continue
-
-                can_load = True
-                deps_dict = plugin.manifest.get('dependencies', {})
-                if isinstance(deps_dict, dict):
-                    for dep_id, req_ver in deps_dict.items():
-                        dep_plugin = self.plugins.get(dep_id)
-                        if not dep_plugin or not dep_plugin.enabled:
-                            plugin.status_reason = f"Missing or disabled dependency: {dep_id}"
-                            can_load = False
-                            break
-                        if not self._check_version(dep_plugin.version, req_ver):
-                            plugin.status_reason = f"Version conflict for '{dep_id}'. Have {dep_plugin.version}, need {req_ver}"
-                            can_load = False
-                            break
-
-                if can_load:
-                    plugin.status_reason = "Dependencies met"
+                if plugin:
                     load_order.append(plugin_id)
-                else:
-                    plugin.enabled = False
-
                 resolved.add(plugin_id)
-
+                
+        # Append any plugins that were part of the cycle but weren't added yet
+        remaining = all_plugin_ids - set(load_order)
+        load_order.extend(list(remaining))
+        
         log.info(f"Plugin load order determined: {load_order}")
         return load_order
+
 
     def _check_version(self, installed_version: str, required_version_spec: str) -> bool:
         try:
@@ -233,11 +226,22 @@ class PluginManager:
             log.error(f"{plugin.status_reason} for plugin '{plugin.name}'.")
             return False
 
+        # Construct a proper Python module path
         entry_module_name = os.path.splitext(entry_point)[0]
-        package_name = plugin.id if plugin.source_type == 'user' else f"{os.path.basename(os.path.dirname(plugin.path))}.{plugin.id}"
-        module_name = f"{package_name}.{entry_module_name}"
+        plugin_dir_name = os.path.basename(os.path.dirname(plugin.path)) # 'plugins', 'core_debug_tools' etc.
+        
+        # Ensure correct package name based on location
+        if plugin.source_type == 'user':
+            # User plugins are directly in the user plugins path
+             module_name = f"{plugin_id}.{entry_module_name}"
+        else:
+             module_name = f"{plugin_dir_name}.{plugin_id}.{entry_module_name}"
 
         try:
+            if module_name in sys.modules:
+                 log.warning(f"Reloading already imported module: {module_name}")
+                 del sys.modules[module_name]
+
             spec = importlib.util.spec_from_file_location(module_name, entry_point_path)
             if not spec or not spec.loader: raise ImportError(f"Could not create module spec for {module_name}")
             module = importlib.util.module_from_spec(spec)
@@ -245,8 +249,7 @@ class PluginManager:
             spec.loader.exec_module(module)
 
             if hasattr(module, 'initialize'):
-                arg_to_pass = self.api
-                plugin.instance = module.initialize(arg_to_pass)
+                plugin.instance = module.initialize(self.api)
                 plugin.module = module
                 plugin.is_loaded = True
                 plugin.status_reason = "Loaded successfully"
@@ -365,16 +368,9 @@ class PluginManager:
         return list(self.plugins.values())
 
     def get_installed_plugins(self) -> list:
-        """
-        Returns a list of dictionaries, where each dictionary contains the
-        plugin's manifest data plus its absolute path and source type.
-        This provides all necessary info for tools like the Plugin Publisher.
-        """
         installed_plugins_data = []
         for p in self.get_all_plugins():
-            # Create a copy of the manifest to avoid modifying the original
             plugin_data = p.manifest.copy()
-            # Add the crucial path and source_type information
             plugin_data['path'] = p.path
             plugin_data['source_type'] = p.source_type
             installed_plugins_data.append(plugin_data)

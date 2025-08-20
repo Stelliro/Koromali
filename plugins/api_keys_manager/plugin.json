@@ -1,7 +1,7 @@
 {
     "id": "api_keys_manager",
     "name": "API Keys Manager",
-    "author": "PuffinPy Team",
+    "author": "Koromali Team",
     "version": "1.0.0",
     "description": "Provides a secure settings page for managing API provider keys.",
     "entry_point": "plugin_main.py"

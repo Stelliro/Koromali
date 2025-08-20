@@ -2,82 +2,74 @@
     {
         "id": "find_replace",
         "name": "Find/Replace",
-        "author": "PuffinPy Team",
+        "author": "Koromali Team",
         "version": "1.1.1",
         "description": "Adds a Find/Replace dialog (Ctrl+F).",
-        "download_url": "https://raw.githubusercontent.com/Stelliro/PuffinPyEditor/main/zips/find_replace.zip"
+        "download_url": "https://raw.githubusercontent.com/Stelliro/Koromali/main/zips/find_replace.zip"
     },
     {
         "id": "linter_ui",
         "name": "Linter UI",
-        "author": "PuffinPy Team",
+        "author": "Koromali Team",
         "version": "1.1.1",
         "description": "Provides the 'Problems' panel to display linter results from Flake8.",
-        "download_url": "https://raw.githubusercontent.com/Stelliro/PuffinPyEditor/main/zips/linter_ui.zip"
+        "download_url": "https://raw.githubusercontent.com/Stelliro/Koromali/main/zips/linter_ui.zip"
     },
     {
         "id": "python_runner",
         "name": "Python Runner",
-        "author": "PuffinPy Team",
+        "author": "Koromali Team",
         "version": "1.1.1",
         "description": "Adds functionality to run Python scripts (F5).",
-        "download_url": "https://raw.githubusercontent.com/Stelliro/PuffinPyEditor/main/zips/python_runner.zip"
+        "download_url": "https://raw.githubusercontent.com/Stelliro/Koromali/main/zips/python_runner.zip"
     },
     {
         "id": "source_control_ui",
         "name": "Source Control UI",
-        "author": "PuffinPy Team",
+        "author": "Koromali Team",
         "version": "1.1.1",
         "description": "Provides the 'Source Control' panel to view Git status.",
-        "download_url": "https://raw.githubusercontent.com/Stelliro/PuffinPyEditor/main/zips/source_control_ui.zip"
+        "download_url": "https://raw.githubusercontent.com/Stelliro/Koromali/main/zips/source_control_ui.zip"
     },
     {
         "id": "ai_export_viewer",
         "name": "AI Export Viewer",
-        "author": "PuffinPy Team",
+        "author": "Koromali Team",
         "version": "1.1.0",
         "description": "Provides a tab-based viewer to manage and review past AI project exports.",
-        "download_url": "https://raw.githubusercontent.com/Stelliro/PuffinPyEditor/main/zips/ai_export_viewer.zip"
+        "download_url": "https://raw.githubusercontent.com/Stelliro/Koromali/main/zips/ai_export_viewer.zip"
     },
     {
-        "id": "ai_patcher",
-        "name": "AI Patcher",
-        "author": "PuffinPy Team",
+        "id": "ai_suite",
+        "name": "AI Suite",
+        "author": "Koromali Team",
         "version": "2.0.0",
-        "description": "A multi-step tool to generate prompts, parse AI responses, and visually review and apply code changes to the project.",
-        "download_url": "https://raw.githubusercontent.com/Stelliro/PuffinPyEditor/main/zips/ai_patcher.zip"
+        "description": "A unified suite for AI-assisted development, including context export, response parsing, and interactive patching.",
+        "download_url": "https://raw.githubusercontent.com/Stelliro/Koromali/main/zips/ai_suite.zip"
     },
     {
         "id": "ai_quick_actions",
         "name": "AI Quick Actions",
-        "author": "PuffinPy Team",
+        "author": "Koromali Team",
         "version": "1.0.0",
         "description": "Adds AI-powered actions like 'Explain' and 'Refactor' to the editor's context menu.",
-        "download_url": "https://raw.githubusercontent.com/Stelliro/PuffinPyEditor/main/zips/ai_quick_actions.zip"
-    },
-    {
-        "id": "ai_tools",
-        "name": "AI Tools",
-        "author": "PuffinPy Team",
-        "version": "1.1.2",
-        "description": "Adds an 'Export for AI' dialog.",
-        "download_url": "https://raw.githubusercontent.com/Stelliro/PuffinPyEditor/main/zips/ai_tools.zip"
+        "download_url": "https://raw.githubusercontent.com/Stelliro/Koromali/main/zips/ai_quick_actions.zip"
     },
     {
         "id": "api_keys_manager",
         "name": "API Keys Manager",
-        "author": "PuffinPy Team",
+        "author": "Koromali Team",
         "version": "1.0.0",
         "description": "Provides a secure settings page for managing API provider keys.",
-        "download_url": "https://raw.githubusercontent.com/Stelliro/PuffinPyEditor/main/zips/api_keys_manager.zip"
+        "download_url": "https://raw.githubusercontent.com/Stelliro/Koromali/main/zips/api_keys_manager.zip"
     },
     {
         "id": "github_tools",
         "name": "GitHub Tools",
-        "author": "PuffinPy Team",
+        "author": "Koromali Team",
         "version": "1.2.0",
         "description": "Provides UI for cloning, releases, and other GitHub interactions.",
-        "download_url": "https://raw.githubusercontent.com/Stelliro/PuffinPyEditor/main/zips/github_tools.zip"
+        "download_url": "https://raw.githubusercontent.com/Stelliro/Koromali/main/zips/github_tools.zip"
     },
     {
         "id": "markdown_viewer",
@@ -85,39 +77,39 @@
         "author": "AI Assistant",
         "version": "1.0.2",
         "description": "Adds support for viewing rendered Markdown (.md) files in a separate tab. It intercepts file open calls to provide a rich text view instead of a plain text editor for .md files.",
-        "download_url": "https://raw.githubusercontent.com/Stelliro/PuffinPyEditor/main/zips/markdown_viewer.zip"
+        "download_url": "https://raw.githubusercontent.com/Stelliro/Koromali/main/zips/markdown_viewer.zip"
     },
     {
         "id": "plugin_publisher",
         "name": "Plugin Publisher",
         "author": "AI Assistant",
         "version": "1.0.1",
-        "description": "Provides a tool to package and publish installed plugins to a specified GitHub distribution repository. Manages versioning and updates the repository's index.json.",
-        "download_url": "https://raw.githubusercontent.com/Stelliro/PuffinPyEditor/main/zips/plugin_publisher.zip"
+        "description": "Provides a tool to package and publish installed plugins to a specified GitHub distribution repository. Manages versioning and updates the repository's indexx.json.",
+        "download_url": "https://raw.githubusercontent.com/Stelliro/Koromali/main/zips/plugin_publisher.zip"
     },
     {
         "id": "script_runner",
         "name": "Script Runner",
-        "author": "PuffinPy Team",
+        "author": "Koromali Team",
         "version": "1.2.0",
         "description": "Adds functionality to run Python, C++, C#, and JavaScript files from the editor.",
-        "download_url": "https://raw.githubusercontent.com/Stelliro/PuffinPyEditor/main/zips/script_runner.zip"
+        "download_url": "https://raw.githubusercontent.com/Stelliro/Koromali/main/zips/script_runner.zip"
     },
     {
         "id": "terminal",
         "name": "Integrated Terminal",
-        "author": "PuffinPy Team",
+        "author": "Koromali Team",
         "version": "1.0.0",
         "description": "Provides a dockable, theme-aware terminal that runs a native shell within the editor.",
-        "download_url": "https://raw.githubusercontent.com/Stelliro/PuffinPyEditor/main/zips/terminal.zip"
+        "download_url": "https://raw.githubusercontent.com/Stelliro/Koromali/main/zips/terminal.zip"
     },
     {
         "id": "theme_editor",
         "name": "Theme Editor",
-        "author": "PuffinPy",
+        "author": "Koromali",
         "version": "1.0.0",
         "description": "A graphical editor for creating and modifying UI themes.",
-        "download_url": "https://raw.githubusercontent.com/Stelliro/PuffinPyEditor/main/zips/theme_editor.zip"
+        "download_url": "https://raw.githubusercontent.com/Stelliro/Koromali/main/zips/theme_editor.zip"
     },
     {
         "id": "debug_framework",
@@ -125,7 +117,7 @@
         "author": "AI Assistant",
         "version": "1.0.0",
         "description": "Provides a core framework and UI for debugging plugins. Other debug tools can register themselves with this framework.",
-        "download_url": "https://raw.githubusercontent.com/Stelliro/PuffinPyEditor/main/zips/debug_framework.zip"
+        "download_url": "https://raw.githubusercontent.com/Stelliro/Koromali/main/zips/debug_framework.zip"
     },
     {
         "id": "enhanced_exceptions",
@@ -133,7 +125,7 @@
         "author": "AI Assistant",
         "version": "1.0.0",
         "description": "Replaces the default crash handler with a developer-friendly dialog showing a detailed traceback.",
-        "download_url": "https://raw.githubusercontent.com/Stelliro/PuffinPyEditor/main/zips/enhanced_exceptions.zip"
+        "download_url": "https://raw.githubusercontent.com/Stelliro/Koromali/main/zips/enhanced_exceptions.zip"
     },
     {
         "id": "live_log_viewer",
@@ -141,14 +133,14 @@
         "author": "AI Assistant",
         "version": "1.0.0",
         "description": "Adds a tool to launch a separate, real-time log viewer application that persists across application restarts.",
-        "download_url": "https://raw.githubusercontent.com/Stelliro/PuffinPyEditor/main/zips/live_log_viewer.zip"
+        "download_url": "https://raw.githubusercontent.com/Stelliro/Koromali/main/zips/live_log_viewer.zip"
     },
     {
         "id": "plugin_initializer",
         "name": "Plugin Initializer",
-        "author": "PuffinPy AI",
+        "author": "Koromali AI",
         "version": "1.0.0",
-        "description": "A developer tool to quickly scaffold new plugins for PuffinPyEditor.",
-        "download_url": "https://raw.githubusercontent.com/Stelliro/PuffinPyEditor/main/zips/plugin_initializer.zip"
+        "description": "A developer tool to quickly scaffold new plugins for Koromali.",
+        "download_url": "https://raw.githubusercontent.com/Stelliro/Koromali/main/zips/plugin_initializer.zip"
     }
 ]

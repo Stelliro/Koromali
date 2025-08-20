@@ -1,13 +1,14 @@
-# PuffinPyEditor/plugins/terminal/plugin_main.py
+# Koromali/plugins/terminal/plugin_main.py
 from PyQt6.QtCore import Qt
 from utils.logger import log
 from .terminal_widget import TerminalWidget
-from app_core.puffin_api import PuffinPluginAPI
+from app_core.koromali_api import KoromaliPluginAPI
+import qtawesome as qta
 
 
 class TerminalPlugin:
-    def __init__(self, puffin_api: PuffinPluginAPI):
-        self.api = puffin_api
+    def __init__(self, koromali_api: KoromaliPluginAPI):
+        self.api = koromali_api
         self.terminal_widget = None
 
         self._setup_ui()
@@ -17,21 +18,26 @@ class TerminalPlugin:
         """Creates and registers the terminal panel and menu action."""
         self.terminal_widget = TerminalWidget(self.api)
 
-        # THE FIX: This call now passes a string for the area, as expected by the API layer.
+        # Use the simplified API to add the widget as a dockable panel.
+        # This automatically handles registration with the hider manager and view menu.
         dock = self.api.add_dock_panel(
-            area_str="bottom",
             widget=self.terminal_widget,
             title="Terminal",
-            icon_name="mdi.console"
+            area_str="bottom",
+            icon_name='mdi.console'
         )
 
         if dock and dock.toggleViewAction():
-            self.api.add_menu_action(
-                menu_name="view",
-                text="Terminal",
-                callback=dock.toggleViewAction().trigger,
-                icon_name="mdi.console"
-            )
+            # The API's add_dock_panel already adds the action to the "View > Docks" menu.
+            # This logic ensures that if we want a direct "View -> Terminal" action, it exists.
+            terminal_toggle_action = dock.toggleViewAction()
+            terminal_toggle_action.setText("Terminal") # Ensure it has a good name in the menu
+            terminal_toggle_action.setIcon(qta.icon('mdi.console'))
+            # To avoid duplicates, we can check if an action with this text already exists.
+            view_menu = self.api.get_menu("view")
+            if view_menu and not any(a.text() == "Terminal" for a in view_menu.actions()):
+                 view_menu.addAction(terminal_toggle_action)
+
 
     def shutdown(self):
         """
@@ -43,10 +49,10 @@ class TerminalPlugin:
             log.info("Terminal process stopped on shutdown request.")
 
 
-def initialize(puffin_api: PuffinPluginAPI):
-    """Entry point for PuffinPyEditor to load the plugin."""
+def initialize(koromali_api: KoromaliPluginAPI):
+    """Entry point for Koromali to load the plugin."""
     try:
-        return TerminalPlugin(puffin_api)
+        return TerminalPlugin(koromali_api)
     except Exception as e:
         log.error(f"Failed to initialize Terminal Plugin: {e}", exc_info=True)
         return None

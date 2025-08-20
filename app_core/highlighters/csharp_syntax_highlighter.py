@@ -1,4 +1,4 @@
-# PuffinPyEditor/app_core/highlighters/csharp_syntax_highlighter.py
+# Koromali/app_core/highlighters/csharp_syntax_highlighter.py
 from typing import List, Tuple, TYPE_CHECKING
 from PyQt6.QtGui import QSyntaxHighlighter, QTextCharFormat, QColor, QFont
 from PyQt6.QtCore import QRegularExpression

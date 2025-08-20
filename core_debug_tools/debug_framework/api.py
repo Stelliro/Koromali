@@ -1,16 +1,16 @@
-# PuffinPyEditor/core_debug_tools/debug_framework/api.py
+# Koromali/core_debug_tools/debug_framework/api.py
 from typing import Dict, Type
 from PyQt6.QtWidgets import QWidget
 from utils.logger import log
 
 
-class PuffinDebugAPI:
+class KoromaliDebugAPI:
     """A specialized API for debug-related plugins."""
 
     def __init__(self, debug_window_instance):
         self._debug_window = debug_window_instance
         self.registered_tools: Dict[str, Type[QWidget]] = {}
-        log.info("PuffinDebugAPI initialized.")
+        log.info("KoromaliDebugAPI initialized.")
 
     def register_tool(self, tool_name: str, widget_class: Type[QWidget]):
         """
@@ -20,7 +20,7 @@ class PuffinDebugAPI:
             tool_name: The name to be displayed on the tab.
             widget_class: The QWidget class (not an instance) to be
                           instantiated. The class constructor should accept
-                          the main PuffinAPI instance.
+                          the main KoromaliAPI instance.
         """
         if tool_name in self.registered_tools:
             log.warning(

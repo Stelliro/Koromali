@@ -1,4 +1,4 @@
-# PuffinPyEditor/app_core/syntax_highlighters.py
+# Koromali/app_core/syntax_highlighters.py
 """
 This module serves as a central import point for all built-in syntax
 highlighters. This prevents code duplication and makes it easier to manage

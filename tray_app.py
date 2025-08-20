@@ -1,58 +1,67 @@
-# PuffinPyEditor/tray_app.py
+# Koromali/tray_app.py
 import sys
 import os
 import subprocess
 from PyQt6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
 from PyQt6.QtGui import QIcon, QAction
 
-# This script is intended to be run as a standalone executable.
-# It finds its sibling 'PuffinPyEditor.exe' and launches it.
+# Hardcode the app name for true standalone functionality.
+# This avoids a fragile import from the main app's code.
+APP_NAME = "Koromali"
 
-def get_executable_path():
-    """Determine the path of the main PuffinPyEditor executable."""
-    if getattr(sys, 'frozen', False):
-        # We are running in a bundled app
-        exe_dir = os.path.dirname(sys.executable)
-        return os.path.join(exe_dir, "PuffinPyEditor.exe")
-    else:
-        # We are running from source, for testing
-        return os.path.join(os.path.dirname(__file__), "dist", "PuffinPyEditor", "PuffinPyEditor.exe")
+class TrayHelper:
+    """A helper class to manage paths and names for the tray application."""
 
-def get_icon_path():
-    """Determine the path of the application icon."""
-    if getattr(sys, 'frozen', False):
-        base_dir = os.path.dirname(sys.executable)
-    else:
-        base_dir = os.path.dirname(__file__)
-    
-    # Path when running from source or in the final bundled structure
-    icon_path = os.path.join(base_dir, "installer", "assets", "PuffinPyEditor.ico")
-    if not os.path.exists(icon_path):
-        # Fallback for when 'tray_app.exe' is in the root of the install dir
-        icon_path = os.path.join(base_dir, "PuffinPyEditor.ico")
+    def __init__(self):
+        self.is_frozen = getattr(sys, 'frozen', False)
+        self.base_dir = os.path.dirname(sys.executable) if self.is_frozen else os.path.dirname(os.path.abspath(__file__))
 
-    return icon_path if os.path.exists(icon_path) else None
+    def get_app_name(self) -> str:
+        """Determines the main application's name from its own executable name."""
+        if self.is_frozen:
+            my_exe_name = os.path.basename(sys.executable)
+            # e.g., "KoromaliTray.exe" -> "Koromali"
+            if "Tray.exe" in my_exe_name:
+                return my_exe_name.replace("Tray.exe", "")
+        return APP_NAME
 
-class PuffinTrayApp(QApplication):
+    def get_executable_path(self, app_name: str) -> str:
+        """Determines the path of the main application executable."""
+        if self.is_frozen:
+            # When frozen, the main exe is in the same directory
+            return os.path.join(self.base_dir, f"{app_name}.exe")
+        else:
+            # When running from source, point to the root of the project to find main.py
+            return os.path.join(self.base_dir, "main.py")
+
+    def get_icon_path(self, app_name: str) -> str:
+        """Determines the path of the application icon."""
+        # This path structure is for the installer build and source.
+        icon_path = os.path.join(self.base_dir, "assets", "koromali.ico")
+        return icon_path if os.path.exists(icon_path) else ""
+
+
+class KoromaliTrayApp(QApplication):
     def __init__(self, argv):
         super().__init__(argv)
         self.setQuitOnLastWindowClosed(False)
 
-        main_exe_path = get_executable_path()
-        icon_path = get_icon_path()
+        self.helper = TrayHelper()
+        self.app_name = self.helper.get_app_name()
+        self.main_app_path = self.helper.get_executable_path(self.app_name)
+        icon_path = self.helper.get_icon_path(self.app_name)
 
         if not icon_path:
             print("Error: Could not find application icon.", file=sys.stderr)
-            # Use a default icon if not found
-            self.tray_icon = QSystemTrayIcon(self)
+            self.tray_icon = QSystemTrayIcon(self) # Use default icon
         else:
             self.tray_icon = QSystemTrayIcon(QIcon(icon_path), self)
 
-        self.tray_icon.setToolTip("PuffinPyEditor")
+        self.tray_icon.setToolTip(self.app_name)
 
         menu = QMenu()
-        open_action = QAction("Open PuffinPyEditor", self)
-        open_action.triggered.connect(lambda: self.open_editor(main_exe_path))
+        open_action = QAction(f"Open {self.app_name}", self)
+        open_action.triggered.connect(self.open_editor)
         menu.addAction(open_action)
 
         menu.addSeparator()
@@ -66,34 +75,35 @@ class PuffinTrayApp(QApplication):
         self.tray_icon.show()
 
     def on_tray_activated(self, reason):
-        # Open on left-click
         if reason == QSystemTrayIcon.ActivationReason.Trigger:
-            self.open_editor(get_executable_path())
+            self.open_editor()
 
-    def open_editor(self, path):
-        if not os.path.exists(path):
+    def open_editor(self):
+        if not os.path.exists(self.main_app_path):
             self.tray_icon.showMessage(
                 "Error",
-                f"Could not find PuffinPyEditor.exe at:\n{path}",
+                f"Could not find {os.path.basename(self.main_app_path)} at:\n{self.main_app_path}",
                 QSystemTrayIcon.MessageIcon.Critical
             )
             return
         
+        command = []
+        if self.helper.is_frozen:
+            command = [self.main_app_path]
+        else: # Running from source
+            python_exe = sys.executable
+            command = [python_exe, self.main_app_path]
+
         try:
-            # Launch the main process. This will trigger UAC if manifested correctly.
-            subprocess.Popen([path])
+            subprocess.Popen(command)
         except Exception as e:
             self.tray_icon.showMessage(
                 "Launch Error",
-                f"Failed to start PuffinPyEditor:\n{e}",
+                f"Failed to start {self.app_name}:\n{e}",
                 QSystemTrayIcon.MessageIcon.Critical
             )
 
 
 if __name__ == "__main__":
-    # Ensure only one instance of the tray app runs
-    # This is a simple implementation; more robust solutions exist (e.g., using a QSharedMemory)
-    # but this is sufficient for this use case.
-    
-    app = PuffinTrayApp(sys.argv)
+    app = KoromaliTrayApp(sys.argv)
     sys.exit(app.exec())

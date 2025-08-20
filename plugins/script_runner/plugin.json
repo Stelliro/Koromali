@@ -1,7 +1,7 @@
 {
     "id": "script_runner",
     "name": "Script Runner",
-    "author": "PuffinPy Team",
+    "author": "Koromali Team",
     "version": "1.2.0",
     "description": "Adds functionality to run Python, C++, C#, and JavaScript files from the editor.",
     "entry_point": "plugin_main.py"

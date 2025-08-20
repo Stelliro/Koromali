@@ -1,11 +1,11 @@
-# PuffinPyEditor/plugins/plugin_publisher/plugin_main.py
-from app_core.puffin_api import PuffinPluginAPI
+# Koromali/plugins/plugin_publisher/plugin_main.py
+from app_core.koromali_api import KoromaliPluginAPI
 from .publish_dialog import PublishDialog
 from utils.logger import log
 
 class PluginPublisherPlugin:
-    def __init__(self, puffin_api: PuffinPluginAPI):
-        self.api = puffin_api
+    def __init__(self, koromali_api: KoromaliPluginAPI):
+        self.api = koromali_api
         self.publish_dialog = None
         self.publish_action = self.api.add_menu_action(
             menu_name="tools",
@@ -16,30 +16,30 @@ class PluginPublisherPlugin:
         self.update_action_state()
         github_manager = self.api.get_manager("github")
         if github_manager:
-            # Connect to a method that can be disconnected reliably
             github_manager.auth_successful.connect(self._on_auth_state_changed)
-            github_manager.auth_failed.connect(self._on_auth_state_changed)
+            # You should connect to a unified signal if possible, or connect to both
+            # If the manager does not have an explicit logout signal, auth_failed can work
+            # as a stand-in for state change that indicates a logged-out status.
+            # self.github_manager.logged_out.connect(self._on_auth_state_changed) # Ideal
+            self.api.get_main_window().destroyed.connect(self.shutdown)
+
 
     def shutdown(self):
-        # Disconnect signals to prevent calls to a deleted object
+        # Disconnect signals to prevent calls to a deleted object on app close
+        log.info("Plugin Publisher is shutting down.")
         github_manager = self.api.get_manager("github")
         if github_manager:
             try:
                 github_manager.auth_successful.disconnect(self._on_auth_state_changed)
-                github_manager.auth_failed.disconnect(self._on_auth_state_changed)
             except (TypeError, RuntimeError):
-                # This can happen if the connection was already broken.
-                # It's safe to ignore.
                 pass
-
-        if self.publish_action:
-            # Use a safer way to get the menu
-            if hasattr(self.api.get_main_window(), 'tools_menu'):
-                 self.api.get_main_window().tools_menu.removeAction(self.publish_action)
-            self.publish_action.deleteLater()
-            # Nullify the reference to prevent further access
-            self.publish_action = None
-        log.info("Plugin Publisher shutdown complete.")
+        
+        # Action is managed by API, so no need to manually remove,
+        # just nullify references
+        self.publish_action = None
+        if self.publish_dialog:
+             self.publish_dialog.deleteLater()
+             self.publish_dialog = None
 
     def _on_auth_state_changed(self, *args, **kwargs):
         """
@@ -70,5 +70,5 @@ class PluginPublisherPlugin:
         self.publish_action.setEnabled(is_logged_in)
         self.publish_action.setToolTip("Upload a plugin." if is_logged_in else "Log in to GitHub to use.")
 
-def initialize(puffin_api: PuffinPluginAPI):
-    return PluginPublisherPlugin(puffin_api)
+def initialize(koromali_api: KoromaliPluginAPI):
+    return PluginPublisherPlugin(koromali_api)

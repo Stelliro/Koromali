@@ -2,7 +2,7 @@
     "id": "theme_editor",
     "name": "Theme Editor",
     "version": "1.0.0",
-    "author": "PuffinPy",
+    "author": "Koromali",
     "description": "A graphical editor for creating and modifying UI themes.",
     "entry_point": "plugin_main.py",
     "dependencies": {}

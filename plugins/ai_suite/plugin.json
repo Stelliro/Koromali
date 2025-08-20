@@ -1,0 +1,8 @@
+{
+    "id": "ai_suite",
+    "name": "AI Suite",
+    "author": "Koromali Team",
+    "version": "2.3.0",
+    "description": "A unified suite for AI-assisted development, including context export, response parsing, and interactive patching.",
+    "entry_point": "plugin_main.py"
+}

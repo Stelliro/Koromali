@@ -1,7 +1,7 @@
 {
     "id": "ai_export_viewer",
     "name": "AI Export Viewer",
-    "author": "PuffinPy Team",
+    "author": "Koromali Team",
     "version": "1.1.0",
     "description": "Provides a tab-based viewer to manage and review past AI project exports.",
     "entry_point": "plugin_main.py"

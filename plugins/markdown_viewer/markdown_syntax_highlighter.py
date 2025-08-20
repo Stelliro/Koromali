@@ -6,6 +6,7 @@ from PyQt6.QtCore import QRegularExpression, Qt
 if TYPE_CHECKING:
     from app_core.theme_manager import ThemeManager
 
+
 class MarkdownSyntaxHighlighter(QSyntaxHighlighter):
     def __init__(self, parent_document, theme_manager: "ThemeManager"):
         super().__init__(parent_document)
@@ -47,7 +48,7 @@ class MarkdownSyntaxHighlighter(QSyntaxHighlighter):
         base_heading_format.setForeground(accent)
         for i in range(1, 7):
             self.formats[f'h{i}'] = QTextCharFormat(base_heading_format)
-            self.formats[f'h{i}'].setFontPointSize(22 - (i-1)*2)
+            self.formats[f'h{i}'].setFontPointSize(22 - (i - 1) * 2)
 
         self.formats['bold'] = QTextCharFormat()
         self.formats['bold'].setFontWeight(QFont.Weight.Bold)
@@ -55,12 +56,12 @@ class MarkdownSyntaxHighlighter(QSyntaxHighlighter):
         self.formats['italic'].setFontItalic(True)
         self.formats['strikethrough'] = QTextCharFormat()
         self.formats['strikethrough'].setFontStrikeOut(True)
-        
+
         code_block_bg_color = QColor(colors.get('editor.lineHighlightBackground', '#323232'))
         self.formats['code_block'] = QTextCharFormat()
         self.formats['code_block'].setBackground(code_block_bg_color)
         self.formats['code_block'].setFontFamily("Consolas")
-        
+
         self.formats['inline_code'] = QTextCharFormat()
         original_inline_code_fg = QColor(colors.get('syntax.string', '#a7c080'))
         final_inline_code_fg = self._get_high_contrast_color(original_inline_code_fg, code_block_bg_color)
@@ -85,28 +86,30 @@ class MarkdownSyntaxHighlighter(QSyntaxHighlighter):
 
     def _format_simple(self, fmt_name):
         return lambda match: self.setFormat(match.capturedStart(0), match.capturedLength(0), self.formats[fmt_name])
-        
+
     def _format_marker_only(self):
         return lambda match: self.setFormat(match.capturedStart(1), match.capturedLength(1), self.formats['marker'])
 
     def _format_heading(self, match):
         level = len(match.captured(1))
         self.setFormat(match.capturedStart(1), level, self.formats['marker'])
-        self.setFormat(match.capturedEnd(1), self.currentBlock().length() - match.capturedEnd(1), self.formats[f'h{level}'])
-    
+        self.setFormat(match.capturedEnd(1), self.currentBlock().length() - match.capturedEnd(1),
+                       self.formats[f'h{level}'])
+
     def _format_inline(self, fmt_name):
         def formatter(match):
             self.setFormat(match.capturedStart(2), len(match.captured(2)), self.formats[fmt_name])
             marker_format = self.formats['inline_code'] if fmt_name == 'inline_code' else self.formats['marker']
             self.setFormat(match.capturedStart(1), len(match.captured(1)), marker_format)
             self.setFormat(match.capturedStart(3), len(match.captured(3)), marker_format)
+
         return formatter
 
     def highlightBlock(self, text: str):
         # State 0: Normal text, State 1: Inside a code block
         is_in_code_block = self.previousBlockState() == 1
         delimiter_match = self.code_block_delimiter.match(text)
-        
+
         if is_in_code_block:
             if delimiter_match.hasMatch():
                 # We are at the end of a code block, so mark this line
@@ -121,7 +124,7 @@ class MarkdownSyntaxHighlighter(QSyntaxHighlighter):
                 block_format = QTextCharFormat(self.formats['code_block'])
                 block_format.setForeground(corrected_fg)
                 self.setFormat(0, len(text), block_format)
-        else: # Normal text block
+        else:  # Normal text block
             if delimiter_match.hasMatch():
                 # This is the start of a new code block. Mark the delimiter
                 # line and switch the state for the next block.
@@ -130,7 +133,6 @@ class MarkdownSyntaxHighlighter(QSyntaxHighlighter):
             else:
                 # This is a normal text line. Reset state and apply inline rules.
                 self.setCurrentBlockState(0)
-                # THE FIX: Replace the incorrect `for...in` loop.
                 for pattern, formatter in self.rules:
                     iterator = pattern.globalMatch(text)
                     while iterator.hasNext():

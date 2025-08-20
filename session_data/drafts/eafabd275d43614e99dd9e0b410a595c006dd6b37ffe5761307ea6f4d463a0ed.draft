@@ -1,0 +1,10 @@
+# Geometry DSL (GEOM) – Authoring Guide
+
+The **GEOM** format allows quick authoring of meshes via plain text: `v` for vertices, `e` for edges, `f` for faces.
+It is robust for LLM generation and trivial for humans to tweak. Parse with `content.llm_geom.geomdsl.parse_geom(text)`
+and register via `build_mesh(engine, geom)`.
+
+*Recommended Flow*:
+1. Write `.geom` in `/content/llm_geom/`.
+2. Load text at runtime, `parse_geom`, `build_mesh`, spawn entity with that mesh.
+3. Validate with automated schema checks in your LLM pipeline, as described in your LLM-Assisted Architecture docs. :contentReference[oaicite:4]{index=4}

@@ -1,4 +1,4 @@
-# PuffinPyEditor/app_core/source_control_manager.py
+# /app_core/source_control_manager.py
 import os
 import re
 import git
@@ -16,7 +16,6 @@ class GitWorker(QObject):
     summaries_ready = pyqtSignal(dict)
     status_ready = pyqtSignal(list, list, list, str)
     error_occurred = pyqtSignal(str)
-    # NEW SIGNAL: Specifically for the "dubious ownership" error
     dubious_ownership_detected = pyqtSignal(str)
     operation_success = pyqtSignal(str, dict)
     git_config_ready = pyqtSignal(str, str)
@@ -63,7 +62,6 @@ class GitWorker(QObject):
             log.error(f"Failed to set git config: {e}")
             self.error_occurred.emit(f"Failed to set Git config: {e}")
 
-    # NEW METHOD: To apply the fix suggested by Git
     def add_safe_directory(self, path: str):
         """Adds a directory to Git's global safe.directory list."""
         try:
@@ -117,7 +115,6 @@ class GitWorker(QObject):
             conflicted = [path for path, _ in repo.index.unmerged_blobs().items()]
             self.status_ready.emit(staged, unstaged + untracked, conflicted, repo_path)
         except GitCommandError as e:
-            # MODIFIED: Intelligent error detection
             stderr_lower = str(e.stderr).lower()
             if "dubious ownership" in stderr_lower:
                 log.warning(f"Git 'dubious ownership' error detected for {repo_path}")
@@ -137,7 +134,6 @@ class GitWorker(QObject):
 
     def commit_files(self, repo_path: str, message: str):
         try:
-            # FIX: Add a try-except block to handle non-Git folders gracefully.
             repo = Repo(repo_path)
             author = self._get_commit_author(repo)
             if not author:
@@ -163,7 +159,6 @@ class GitWorker(QObject):
 
     def push(self, repo_path: str, tag_name: Optional[str] = None):
         try:
-            # FIX: Add a try-except block to handle non-Git folders gracefully.
             repo = Repo(repo_path)
             origin = repo.remotes.origin
             if tag_name:
@@ -203,7 +198,6 @@ class GitWorker(QObject):
 
     def pull(self, repo_path: str):
         try:
-            # FIX: Add a try-except block to handle non-Git folders gracefully.
             repo = Repo(repo_path)
             origin = repo.remotes.origin
             log.info(f"Pulling from remote '{origin.url}'...")
@@ -225,7 +219,6 @@ class GitWorker(QObject):
                 msg = f"Git Pull failed. Stderr: {e.stderr.strip()}"
             self.error_occurred.emit(msg)
 
-    # NEW METHOD
     def force_push(self, repo_path: str):
         """Force pushes the current branch to the remote."""
         try:
@@ -237,7 +230,6 @@ class GitWorker(QObject):
         except GitCommandError as e:
             self.error_occurred.emit(f"Force Push failed: {e.stderr.strip()}")
 
-    # NEW METHOD
     def abort_merge(self, repo_path: str):
         """Aborts a conflicted merge state."""
         try:
@@ -407,7 +399,6 @@ class SourceControlManager(QObject):
     summaries_ready = pyqtSignal(dict)
     status_updated = pyqtSignal(list, list, list, str)
     git_error = pyqtSignal(str)
-    # NEW SIGNAL
     dubious_ownership_detected = pyqtSignal(str)
     git_success = pyqtSignal(str, dict)
     git_config_ready = pyqtSignal(str, str)
@@ -429,7 +420,6 @@ class SourceControlManager(QObject):
     _request_set_default_branch = pyqtSignal()
     _request_force_push = pyqtSignal(str)
     _request_abort_merge = pyqtSignal(str)
-    # NEW REQUEST SIGNAL
     _request_add_safe_directory = pyqtSignal(str)
 
     def __init__(self, parent: Optional[QObject] = None):
@@ -493,9 +483,7 @@ class SourceControlManager(QObject):
     def set_git_config(self, name: str, email: str):
         self._request_set_git_config.emit(name, email)
 
-    # NEW PUBLIC METHOD
     def add_safe_directory(self, path: str):
-        """Requests the worker to add a path to the safe.directory list."""
         self._request_add_safe_directory.emit(path)
 
     def set_default_branch_to_main(self):

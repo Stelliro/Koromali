@@ -1,0 +1,419 @@
+--- a/plugins/ai_quick_actions/ai_response_dialog.py
++++ b/plugins/ai_quick_actions/ai_response_dialog.py
+@@ -1 +1,19 @@
+----DELETED---
++# Compatibility wrapper for AI Response Dialog
++# The AI Quick Actions plugin used to ship its own dialog; it now reuses the AI Suite's.
++try:
++    from plugins.ai_suite.ai_response_dialog import AIResponseDialog  # re-export
++    __all__ = ['AIResponseDialog']
++except Exception as e:
++    # Provide a tiny fallback so the plugin can still show text if AI Suite isn't available.
++    from PyQt6.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QDialogButtonBox
++    class AIResponseDialog(QDialog):
++        def __init__(self, response_text: str, parent=None):
++            super().__init__(parent)
++            self.setWindowTitle("AI Response")
++            layout = QVBoxLayout(self)
++            self.text_edit = QTextEdit(response_text)
++            self.text_edit.setReadOnly(True)
++            layout.addWidget(self.text_edit)
++            bb = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
++            bb.rejected.connect(self.reject)
++            layout.addWidget(bb)
+--- a/plugins/installer_builder/config_editor_dialog.py
++++ b/plugins/installer_builder/config_editor_dialog.py
+@@ -1 +1,12 @@
+----DELETED---
++# Minimal stub for a config editor dialog that was removed in a refactor.
++from PyQt6.QtWidgets import QDialog, QVBoxLayout, QLabel, QDialogButtonBox
++
++class ConfigEditorDialog(QDialog):
++    def __init__(self, parent=None):
++        super().__init__(parent)
++        self.setWindowTitle("Installer Config Editor (Unavailable)")
++        layout = QVBoxLayout(self)
++        layout.addWidget(QLabel("This feature is temporarily unavailable in this build."))
++        bb = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
++        bb.rejected.connect(self.reject)
++        layout.addWidget(bb)
+--- a/plugins/script_runner/code_runner.py
++++ b/plugins/script_runner/code_runner.py
+@@ -1 +1,5 @@
+----DELETED---
++# Legacy helper for Script Runner. Kept for backward compatibility.
++# Current plugin_main uses QProcess directly; this module remains as a no-op shim.
++def run_code(*args, **kwargs):
++    """Deprecated shim; no-op."""
++    return False, "This helper is deprecated. Use ScriptRunnerPlugin in plugin_main."
+--- a/utils/validate_assets.py
++++ b/utils/validate_assets.py
+@@ -62,7 +62,7 @@
+             content = f.read()
+ 
+         # Find the start of the dictionary
+-        start_index = content.find(f"{BUILT_IN_THEMES_KEY} = {")
++        start_index = content.find(f"{BUILT_IN_THEMES_KEY} = " + "{")
+         if start_index == -1:
+             errors.append(f"Could not find '{BUILT_IN_THEMES_KEY}' dictionary in {os.path.basename(manager_file)}.")
+             return {}, errors
+--- a/core_debug_tools/plugin_initializer/plugin_main.py
++++ b/core_debug_tools/plugin_initializer/plugin_main.py
+@@ -101,7 +101,7 @@
+             # 4. Create plugin.json
+             json_path = os.path.join(plugin_path, 'plugin.json')
+             with open(json_path, 'w', encoding='utf-8') as f:
+-                json.dump(data, f, indexnt=4)
++                json.dump(data, f, indent=4)
+ 
+             # 5. Create plugin_main.py
+             main_py_path = os.path.join(plugin_path, data['entry_point'])
+--- a/plugins/ai_suite/style_preset_manager.py
++++ b/plugins/ai_suite/style_preset_manager.py
+@@ -1,97 +1,89 @@
+ # /plugins/ai_suite/style_preset_manager.py
++from __future__ import annotations
+ 
++import os
++import json
++from typing import Dict, Any
+ 
+-def _validate_preset(data: Dict[str, Any]) -> Dict[str, str]:
+-"""Return a sanitized copy of a preset dict. Only string->string entries are allowed."""
+-out: Dict[str, str] = {}
+-for k, v in (data or {}).items():
+-if isinstance(k, str) and isinstance(v, str):
+-out[k] = v
+-return out
++from utils.helpers import get_base_path
++from utils.logger import log
+ 
++# Built-in presets that are always available and cannot be deleted.
++DEFAULT_PRESETS: Dict[str, Dict[str, str]] = {
++    "Default":  {"tone": "balanced"},
++    "Detailed": {"tone": "detailed"},
++    "Friendly": {"tone": "friendly"},
++}
++
++def _validate_preset(data: Dict[str, Any] | None) -> Dict[str, str]:
++    """Return a sanitized copy of a preset dict. Only str->str entries are kept."""
++    out: Dict[str, str] = {}
++    if not data:
++        return out
++    for k, v in data.items():
++        if isinstance(k, str) and isinstance(v, str):
++            out[k] = v
++    return out
+ 
+ class StylePresetManager:
+-def __init__(self) -> None:
+-base = get_base_path()
+-self._dir = os.path.join(base, ".koromali")
+-self._file = os.path.join(self._dir, "style_presets.json")
+-self._presets: Dict[str, Dict[str, str]] = {}
+-self._load()
++    """
++    Stores simple style presets (e.g., {"tone": "friendly"}) on disk under
++    <base>/.koromali/style_presets.json while exposing the three immutable defaults.
++    """
++    def __init__(self) -> None:
++        base = get_base_path()
++        self._dir = os.path.join(base, ".koromali")
++        self._file = os.path.join(self._dir, "style_presets.json")
++        self._presets: Dict[str, Dict[str, str]] = {}
++        self._load()
+ 
++    # --- Persistence ---
++    def _load(self) -> None:
++        self._presets = {k: dict(v) for k, v in DEFAULT_PRESETS.items()}
++        try:
++            if os.path.exists(self._file):
++                with open(self._file, "r", encoding="utf-8") as f:
++                    data = json.load(f) or {}
++                if isinstance(data, dict):
++                    for name, preset in data.items():
++                        clean = _validate_preset(preset)
++                        if clean:
++                            self._presets[name] = clean
++        except Exception as e:  # pragma: no cover
++            log.warning(f"Could not load style presets: {e}")
+ 
+-def list_presets(self) -> List[str]:
+-names = list(self._presets.keys())
+-# Keep "Default" first, avoid case-duplicate
+-names.sort(key=lambda n: (0 if n.lower() == "default" else 1, n.lower()))
+-return names
++    def _save(self) -> None:
++        try:
++            os.makedirs(self._dir, exist_ok=True)
++            # Save only non-defaults and only if they differ from defaults
++            to_save: Dict[str, Dict[str, str]] = {}
++            for k, v in self._presets.items():
++                if k in DEFAULT_PRESETS and v == DEFAULT_PRESETS[k]:
++                    continue
++                to_save[k] = v
++            with open(self._file, "w", encoding="utf-8") as f:
++                json.dump(to_save, f, indent=2, ensure_ascii=False)
++        except Exception as e:  # pragma: no cover
++            log.warning(f"Could not save style presets: {e}")
+ 
++    # --- API used by UI ---
++    def list_presets(self) -> list[str]:
++        return sorted(self._presets.keys())
+ 
+-def get_preset(self, name: str) -> Dict[str, str]:
+-return dict(self._presets.get(name, DEFAULT_PRESETS["Default"]))
++    def get_preset(self, name: str) -> Dict[str, str]:
++        return dict(self._presets.get(name, {}))
+ 
++    def upsert_preset(self, name: str, data: Dict[str, Any]) -> None:
++        clean = _validate_preset(data)
++        if not clean:
++            # If caller passes an empty/invalid dict, treat as a no-op to avoid surprises.
++            return
++        self._presets[name] = clean
++        self._save()
+ 
+-def set_preset(self, name: str, data: Dict[str, str]) -> None:
+-clean_name = (name or "Unnamed").strip()
+-if not clean_name:
+-clean_name = "Preset"
+-# Normalize to Title Case except known "Default"
+-if clean_name.lower() == "default":
+-clean_name = "Default"
+-else:
+-clean_name = clean_name[:1].upper() + clean_name[1:]
+-
+-
+-clean_data = _validate_preset(data)
+-if not clean_data:
+-raise ValueError("Preset must contain at least one string key/value")
+-
+-
+-self._presets[clean_name] = clean_data
+-self._save()
+-
+-
+-def delete_preset(self, name: str) -> bool:
+-if name.lower() == "default":
+-return False
+-removed = self._presets.pop(name, None) is not None
+-if removed:
+-self._save()
+-return removed
+-
+-
+-# ---- internal I/O ----
+-def _load(self) -> None:
+-try:
+-os.makedirs(self._dir, exist_ok=True)
+-if os.path.exists(self._file):
+-with open(self._file, "r", encoding="utf-8") as f:
+-loaded = json.load(f)
+-else:
+-loaded = {}
+-if not isinstance(loaded, dict):
+-loaded = {}
+-except Exception as e:
+-log.warning(f"Could not load style presets: {e}")
+-loaded = {}
+-# Sanitize values to str->str
+-safe_loaded: Dict[str, Dict[str, str]] = {}
+-for key, val in loaded.items():
+-if not isinstance(key, str) or not isinstance(val, dict):
+-continue
+-safe_loaded[key] = _validate_preset(val)
+-self._presets = {**DEFAULT_PRESETS, **safe_loaded}
+-
+-
+-def _save(self) -> None:
+-try:
+-os.makedirs(self._dir, exist_ok=True)
+-# Save only non-defaults and only if they differ from defaults
+-to_save: Dict[str, Dict[str, str]] = {}
+-for k, v in self._presets.items():
+-if k in DEFAULT_PRESETS and v == DEFAULT_PRESETS[k]:
+-continue
+-to_save[k] = v
+-with open(self._file, "w", encoding="utf-8") as f:
+-json.dump(to_save, f, indent=2, ensure_ascii=False)
+-except Exception as e:
+-log.warning(f"Could not save style presets: {e}")
++    def delete_preset(self, name: str) -> None:
++        if name in DEFAULT_PRESETS:
++            return  # Immutable defaults
++        if name in self._presets:
++            del self._presets[name]
++            self._save()
+--- a/plugins/ai_suite/response_parser.py
++++ b/plugins/ai_suite/response_parser.py
+@@ -1,113 +1,67 @@
+ # /plugins/ai_suite/response_parser.py
+-# Try to extract path from header; else infer from '--- a/...'
+-file_path = header.strip() if header else ''
+-if not file_path:
+-src, dst = _parse_paths_from_headers(body)
+-# Prefer dst when creating a file, else src
+-file_path = dst or src
+-if not file_path:
+-log.warning("AI Patcher: PATCH block missing filepath; skipping.")
+-continue
+-changes.append({'type': 'APPLY_PATCH', 'file_path': file_path, 'content': body})
+-log.info(f"AI Patcher: Parsed PATCH for {file_path}")
+-continue
++from __future__ import annotations
+ 
++import os
++import re
++from typing import List, Dict
+ 
+-log.warning(f"AI Patcher: Unknown block type '{label}'. Skipping.")
+-return changes
++PATCH_FENCE_RE = re.compile(
++    r"```(?:patch|diff)\s*(.*?)```",
++    re.DOTALL | re.IGNORECASE
++)
++HEADER_PATH_RE = re.compile(r"^\-\-\-\s+a/(.+)$", re.MULTILINE)
++HEADER_PATH_PLUS_RE = re.compile(r"^\+\+\+\s+b/(.+)$", re.MULTILINE)
+ 
++def _extract_first_path(patch_block: str) -> str | None:
++    # Prefer +++ b/path (destination), else --- a/path
++    m2 = HEADER_PATH_PLUS_RE.search(patch_block)
++    if m2:
++        return m2.group(1).strip()
++    m1 = HEADER_PATH_RE.search(patch_block)
++    if m1:
++        return m1.group(1).strip()
++    return None
+ 
++def parse_llm_response(text: str, project_root: str) -> List[Dict]:
++    """
++    Parse an LLM response looking for fenced ```patch or ```diff blocks.
++    Returns a list of change dicts of the form:
++      { "type": "APPLY_PATCH", "file_path": "<relative>", "content": "<patch>" }
++    Unknown content is ignored rather than raising.
++    """
++    changes: List[Dict] = []
+ 
++    if not text:
++        return changes
+ 
+-def apply_changes_to_project(project_root: str, changes: List[dict]) -> tuple[bool, str]:
+-"""Apply a list of parsed changes to a project directory transactionally.
++    for m in PATCH_FENCE_RE.finditer(text):
++        patch = m.group(0)
++        file_path = _extract_first_path(patch)
++        if not file_path:
++            # Try to infer a relative path from any a/... or b/... occurrences
++            # This is intentionally forgiving.
++            p = re.search(r"^[\-\+]\-\-\s+[ab]/(.+)$", patch, re.MULTILINE)
++            if p:
++                file_path = p.group(1).strip()
+ 
++        if not file_path:
++            # Can't determine target file; skip this block.
++            continue
+ 
+-Stage 1: validate & prepare a snapshot of final file contents without touching disk.
+-Stage 2: write the snapshot atomically (temp-file + os.replace). Refuse path traversal.
+-"""
+-log.info("AI Patcher: Stage 1/2 - Preparing snapshot of all file changes...")
+-snapshot: Dict[str, Optional[str]] = {} # path -> new_text (None means delete)
++        # Normalize to a relative path
++        file_path = file_path.replace("\\", "/")
++        # Ensure the file stays under the project root, but keep relative for UI
++        if os.path.isabs(file_path):
++            try:
++                file_path = os.path.relpath(file_path, project_root)
++            except Exception:
++                # If relpath fails, keep the basename as a safest fallback
++                file_path = os.path.basename(file_path)
+ 
++        changes.append({
++            "type": "APPLY_PATCH",
++            "file_path": file_path,
++            "content": patch
++        })
+ 
+-# Helper to load current or staged content
+-def _read_current(path: str) -> str:
+-if path in snapshot:
+-return '' if snapshot[path] is None else snapshot[path] # type: ignore
+-try:
+-with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+-return f.read()
+-except FileNotFoundError:
+-return ''
+-
+-
+-abs_root = os.path.normpath(os.path.abspath(project_root))
+-try:
+-for change in changes:
+-ctype = change.get('type')
+-if ctype in {'APPLY_PATCH', 'CREATE_OR_REPLACE', 'DELETE'}:
+-rel = change.get('file_path', '')
+-if not rel:
+-raise ValueError('Missing file_path')
+-path = _safe_join(project_root, rel)
+-elif ctype == 'MOVE':
+-src_rel = change.get('src_path', '')
+-dst_rel = change.get('dst_path', '')
+-if not (src_rel and dst_rel):
+-raise ValueError('MOVE requires src_path and dst_path')
+-src_path = _safe_join(project_root, src_rel)
+-dst_path = _safe_join(project_root, dst_rel)
+-else:
+-log.warning(f"AI Patcher: Unknown change type {ctype}; skipping.")
+-continue
+-
+-
+-if ctype == 'APPLY_PATCH':
+-current = _read_current(path)
+-try:
+-new_text = apply_patch(current, change.get('content', ''), lenient_whitespace=False)
+-except Exception as e:
+-return False, f"Patch failed for {path}: {e}"
+-snapshot[path] = new_text
+-
+-
+-elif ctype == 'CREATE_OR_REPLACE':
+-snapshot[path] = change.get('content', '')
+-
+-
+-elif ctype == 'DELETE':
+-snapshot[path] = None
+-
+-
+-elif ctype == 'MOVE':
+-# Simulate move by carrying staged or current content to destination, and deleting source
+-current = _read_current(src_path)
+-if current == '' and not os.path.exists(src_path) and src_path not in snapshot:
+-log.warning(f"AI Patcher: MOVE source does not exist: {src_path}")
+-snapshot[dst_path] = current
+-snapshot[src_path] = None
+-
+-
+-# Stage 2 - write atomically
+-log.info("AI Patcher: Stage 2/2 - Writing files atomically...")
+-for path, new_content in snapshot.items():
+-# Ensure path still within root (defense-in-depth)
+-path = _safe_join(project_root, os.path.relpath(path, project_root))
+-if new_content is None:
+-if os.path.exists(path):
+-os.remove(path)
+-log.info(f"Deleted file: {path}")
+-continue
+-
+-
+-os.makedirs(os.path.dirname(path), exist_ok=True)
+-tmp_path = f"{path}.tmp.{os.getpid()}"
+-with open(tmp_path, 'w', encoding='utf-8', newline='\n') as f:
+-f.write(new_content)
+-os.replace(tmp_path, path)
+-log.info(f"Wrote changes to: {path}")
+-except Exception as e:
+-return False, f"A critical error occurred during file writing: {e}"
+-
+-
+-return True, f"Successfully applied {len(snapshot)} change(s)."
++    return changes

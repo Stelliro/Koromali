@@ -1,4 +1,4 @@
-# PuffinPyEditor/plugins/api_keys_manager/api_keys_settings_page.py
+# Koromali/plugins/api_keys_manager/api_keys_settings_page.py
 from PyQt6.QtWidgets import (
     QDialog, QFormLayout, QLineEdit, QHBoxLayout, QPushButton, QLabel,
     QDialogButtonBox, QVBoxLayout

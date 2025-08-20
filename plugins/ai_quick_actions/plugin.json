@@ -1,8 +1,11 @@
 {
     "id": "ai_quick_actions",
     "name": "AI Quick Actions",
-    "author": "PuffinPy Team",
+    "author": "Koromali Team",
     "version": "1.0.0",
     "description": "Adds AI-powered actions like 'Explain' and 'Refactor' to the editor's context menu.",
-    "entry_point": "plugin_main.py"
+    "entry_point": "plugin_main.py",
+    "dependencies": {
+        "ai_suite": ">=2.1.0"
+    }
 }

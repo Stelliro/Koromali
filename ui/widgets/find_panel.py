@@ -1,33 +1,30 @@
 # /ui/widgets/find_panel.py
 from typing import Optional, TYPE_CHECKING
 from PyQt6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QLineEdit,
-                             QPushButton, QCheckBox, QToolButton, QFrame)
+                             QPushButton, QCheckBox, QToolButton, QFrame, QApplication)
 from PyQt6.QtGui import QTextDocument, QKeyEvent
 from PyQt6.QtCore import Qt, pyqtSignal
 import qtawesome as qta
 
-from app_core.settings_manager import settings_manager
 
-# This is a super neat trick I learned to prevent circular import errors!
-# It lets me use EditorWidget for type hinting without actually importing it at runtime.
 if TYPE_CHECKING:
     from ..editor_widget import EditorWidget
     from app_core.theme_manager import ThemeManager
+    from app_core.settings_manager import SettingsManager
 
 
 class FindPanel(QFrame):
     """An integrated panel for find and replace operations."""
-    # This signal tells the parent (the EditorWidget) to close me.
     close_requested = pyqtSignal()
-    # This signal asks the main window to show a message in the status bar.
     status_message_requested = pyqtSignal(str, int)
+    find_in_project_requested = pyqtSignal(str, object)
+    replace_in_project_requested = pyqtSignal(str, str, object)
 
-    def __init__(self, theme_manager: "ThemeManager", parent: QWidget):
+    def __init__(self, theme_manager: "ThemeManager", settings_manager: "SettingsManager", parent: QWidget):
         super().__init__(parent)
-        # This will be the editor widget this panel is currently controlling.
         self.editor: Optional["EditorWidget"] = None
         self.theme_manager = theme_manager
-        # Giving this an object name is great for styling with CSS-like QSS!
+        self.settings_manager = settings_manager
         self.setObjectName("FindPanelFrame")
         self._setup_ui()
         self._connect_signals()
@@ -35,7 +32,6 @@ class FindPanel(QFrame):
         self.update_theme()
 
     def _setup_ui(self):
-        # This function builds the visual components of the panel.
         self.main_layout = QVBoxLayout(self)
         self.main_layout.setContentsMargins(5, 5, 5, 5)
         self.main_layout.setSpacing(5)
@@ -55,14 +51,17 @@ class FindPanel(QFrame):
             'mdi.arrow-up', "Find Previous (Shift+F3)")
         self.find_next_button = self._create_tool_button(
             'mdi.arrow-down', "Find Next (F3)")
+        self.find_all_button = self._create_tool_button(
+            'mdi.folder-search-outline', "Find All in Project")
         self.close_button = self._create_tool_button(
             'mdi.close', "Close (Esc)")
+
         find_layout.addWidget(self.find_prev_button)
         find_layout.addWidget(self.find_next_button)
+        find_layout.addWidget(self.find_all_button)
         find_layout.addWidget(self.close_button)
         self.main_layout.addLayout(find_layout)
 
-        # This widget holds the "replace" parts and can be hidden/shown.
         self.expandable_widget = QWidget()
         expandable_layout = QVBoxLayout(self.expandable_widget)
         expandable_layout.setContentsMargins(0, 5, 0, 0)
@@ -74,7 +73,10 @@ class FindPanel(QFrame):
         self.replace_button = self._create_tool_button(
             'mdi.find-replace', "Replace", text="Replace")
         self.replace_all_button = self._create_tool_button(
-            'mdi.auto-fix', "Replace All", text="All")
+            'mdi.auto-fix',
+            "Replace all in current file.\nHold Ctrl to replace in all project files.",
+            text="All"
+        )
         replace_layout.addWidget(self.replace_input)
         replace_layout.addWidget(self.replace_button)
         replace_layout.addWidget(self.replace_all_button)
@@ -95,11 +97,10 @@ class FindPanel(QFrame):
     def _create_tool_button(
             self, icon_name: str, tooltip: str, text: Optional[str] = None
     ) -> QToolButton:
-        # A helper function to make creating buttons less repetitive. DRY principle!
         button = QToolButton()
         button.setAutoRaise(True)
         button.setToolTip(tooltip)
-        button.setProperty("icon_name", icon_name) # Store the icon name for theming
+        button.setProperty("icon_name", icon_name)
         if text:
             button.setText(text)
             button.setToolButtonStyle(
@@ -107,7 +108,6 @@ class FindPanel(QFrame):
         return button
 
     def _connect_signals(self):
-        # Connecting all the button clicks to their functions.
         self.close_button.clicked.connect(self.close_requested.emit)
         self.toggle_button.toggled.connect(self.expandable_widget.setVisible)
         self.find_input.textChanged.connect(self._update_button_states)
@@ -116,13 +116,12 @@ class FindPanel(QFrame):
             lambda: self._find(backwards=False))
         self.find_prev_button.clicked.connect(
             lambda: self._find(backwards=True))
+        self.find_all_button.clicked.connect(self._on_find_all_in_project)
         self.replace_button.clicked.connect(self._replace)
         self.replace_all_button.clicked.connect(self._replace_all)
 
     def connect_editor(self, editor: "EditorWidget"):
-        # This method links the panel to a specific editor instance.
         self.editor = editor
-        # Pre-fill the find input with any selected text.
         initial_text = editor.text_area.textCursor().selectedText()
         if initial_text:
             self.find_input.setText(initial_text)
@@ -134,48 +133,44 @@ class FindPanel(QFrame):
         self.find_input.selectAll()
 
     def update_theme(self):
-        # Applies the current theme's colors to the panel.
         colors = self.theme_manager.current_theme_data['colors']
         frame_bg = colors.get('sidebar.background', '#333')
         self.setStyleSheet(
             f"#FindPanelFrame {{ background-color: {frame_bg}; "
             f"border-bottom: 1px solid {colors.get('input.border')}; }}")
-        # I'm re-applying icons here to make sure they get the new theme colors.
         for button in self.findChildren((QToolButton, QPushButton)):
             if icon_name := button.property("icon_name"):
                 button.setIcon(qta.icon(icon_name))
 
     def keyPressEvent(self, event: QKeyEvent):
-        # A key press event handler to allow closing the panel with the Escape key.
         if event.key() == Qt.Key.Key_Escape:
             self.close_requested.emit()
             return
         super().keyPressEvent(event)
 
     def load_settings(self):
-        # Loads user preferences for search options.
         self.case_checkbox.setChecked(
-            settings_manager.get("search_case_sensitive", False))
+            self.settings_manager.get("search_case_sensitive", False))
         self.whole_word_checkbox.setChecked(
-            settings_manager.get("search_whole_word", False))
+            self.settings_manager.get("search_whole_word", False))
 
     def save_settings(self):
-        # Saves user preferences for search options.
-        settings_manager.set(
+        self.settings_manager.set(
             "search_case_sensitive", self.case_checkbox.isChecked())
-        settings_manager.set(
+        self.settings_manager.set(
             "search_whole_word", self.whole_word_checkbox.isChecked())
 
     def _update_button_states(self):
-        # Disables buttons if there's no text to find.
         has_text = bool(self.find_input.text())
+        is_project_open = self.editor and self.editor.koromali_api.get_manager("project").is_project_open()
+        
         self.find_next_button.setEnabled(has_text)
         self.find_prev_button.setEnabled(has_text)
+        self.find_all_button.setEnabled(has_text and is_project_open)
         self.replace_button.setEnabled(has_text)
         self.replace_all_button.setEnabled(has_text)
 
     def _get_find_flags(self) -> QTextDocument.FindFlag:
-        # Converts our checkboxes into flags that Qt's find function understands.
         flags = QTextDocument.FindFlag(0)
         if self.case_checkbox.isChecked():
             flags |= QTextDocument.FindFlag.FindCaseSensitively
@@ -183,8 +178,14 @@ class FindPanel(QFrame):
             flags |= QTextDocument.FindFlag.FindWholeWords
         return flags
 
+    def _on_find_all_in_project(self):
+        query = self.find_input.text()
+        if not query:
+            return
+        flags = self._get_find_flags()
+        self.find_in_project_requested.emit(query, flags)
+
     def _find(self, backwards: bool = False):
-        # Performs the find operation.
         if not self.editor:
             return
         query = self.find_input.text()
@@ -197,7 +198,6 @@ class FindPanel(QFrame):
         self.save_settings()
 
     def _replace(self):
-        # Performs a single replacement.
         if not self.editor:
             return
         query = self.find_input.text()
@@ -209,13 +209,19 @@ class FindPanel(QFrame):
         self.save_settings()
 
     def _replace_all(self):
-        # Performs a "replace all" operation.
         if not self.editor:
             return
+        
         query = self.find_input.text()
         replace_text = self.replace_input.text()
         flags = self._get_find_flags()
+        
+        # Check for Ctrl key modifier
+        if QApplication.keyboardModifiers() & Qt.KeyboardModifier.ControlModifier:
+            self.replace_in_project_requested.emit(query, replace_text, flags)
+            return
+
         count = self.editor.replace_all(query, replace_text, flags)
         self.save_settings()
         self.status_message_requested.emit(
-            f"Replaced {count} occurrence(s).", 3000)
+            f"Replaced {count} occurrence(s) in current file.", 3000)

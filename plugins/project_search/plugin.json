@@ -1,0 +1,9 @@
+{
+    "id": "project_search",
+    "name": "Project Search",
+    "author": "AI Assistant",
+    "version": "1.0.0",
+    "description": "Provides a dockable panel to display project-wide search results.",
+    "entry_point": "plugin_main.py",
+    "dependencies": {}
+}

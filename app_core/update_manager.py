@@ -1,11 +1,14 @@
-# PuffinPyEditor/app_core/update_manager.py
+# Koromali/app_core/update_manager.py
 import requests
 from packaging import version
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, TYPE_CHECKING
 from PyQt6.QtCore import QObject, pyqtSignal
-from .settings_manager import settings_manager
+
 from utils.versioning import APP_VERSION
 from utils.logger import log
+
+if TYPE_CHECKING:
+    from .settings_manager import SettingsManager
 
 
 class UpdateManager(QObject):
@@ -14,10 +17,14 @@ class UpdateManager(QObject):
     """
     update_check_finished = pyqtSignal(dict)
 
+    def __init__(self, settings_manager: "SettingsManager", parent: Optional[QObject] = None):
+        super().__init__(parent)
+        self.settings_manager = settings_manager
+
     def _find_latest_release(self, releases: List[Dict]) -> Optional[Dict]:
         """
-        Parses a list of release objects and returns the one with the
-        highest semantic version.
+        Parses a list of release objects from the GitHub API and returns the
+        one with the highest semantic version.
         """
         latest_release = None
         latest_parsed_version = version.parse("0.0.0")
@@ -28,7 +35,6 @@ class UpdateManager(QObject):
                 continue
 
             try:
-                # packaging.version can handle pre-releases like 'beta', 'rc1'
                 current_parsed_version = version.parse(tag_name)
                 if current_parsed_version > latest_parsed_version:
                     latest_parsed_version = current_parsed_version
@@ -36,7 +42,7 @@ class UpdateManager(QObject):
             except version.InvalidVersion:
                 log.warning(f"Skipping release with invalid tag version: {tag_name}")
                 continue
-        
+
         return latest_release
 
     def check_for_updates(self):
@@ -46,14 +52,14 @@ class UpdateManager(QObject):
         """
         log.info(f"Checking for updates... Current version: {APP_VERSION}")
 
-        active_repo_id = settings_manager.get("active_update_repo_id")
+        active_repo_id = self.settings_manager.get("active_update_repo_id")
         if not active_repo_id:
             msg = "No active repository set for updates in Preferences."
             log.warning(f"Update check failed: {msg}")
             self.update_check_finished.emit({"error": msg})
             return
 
-        all_repos = settings_manager.get("source_control_repos", [])
+        all_repos = self.settings_manager.get("source_control_repos", [])
         repo_config = next(
             (r for r in all_repos if r.get("id") == active_repo_id), None
         )
@@ -72,16 +78,14 @@ class UpdateManager(QObject):
             log.error(f"Update check failed: {msg}")
             self.update_check_finished.emit({"error": msg})
             return
-        
-        # --- FIX: Use /releases endpoint to get all releases, not just the latest "full" one ---
+
         api_url = f"https://api.github.com/repos/{owner}/{repo}/releases"
         log.info(f"Fetching release list from: {api_url}")
 
         try:
             response = requests.get(api_url, timeout=15)
             response.raise_for_status()
-            
-            # --- FIX: Find the latest release from the list ---
+
             release_data = self._find_latest_release(response.json())
             if not release_data:
                 msg = "No valid releases found in the repository."
@@ -105,7 +109,6 @@ class UpdateManager(QObject):
                     ),
                     "download_url": None
                 }
-                # Find the first .zip asset, as this is what the updater expects
                 for asset in release_data.get("assets", []):
                     if asset.get("name", "").lower().endswith(".zip"):
                         result["download_url"] = asset.get(

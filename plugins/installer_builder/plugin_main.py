@@ -1,11 +1,11 @@
 # /plugins/installer_builder/plugin_main.py
-from app_core.puffin_api import PuffinPluginAPI
+from app_core.koromali_api import KoromaliPluginAPI
 from .builder_dialog import BuilderDialog
 from utils.logger import log
 
 class InstallerBuilderPlugin:
-    def __init__(self, puffin_api: PuffinPluginAPI):
-        self.api = puffin_api
+    def __init__(self, koromali_api: KoromaliPluginAPI):
+        self.api = koromali_api
         self.main_window = self.api.get_main_window()
         self.dialog_instance = None
 
@@ -29,6 +29,6 @@ class InstallerBuilderPlugin:
         self.dialog_instance.raise_()
         self.dialog_instance.activateWindow()
 
-def initialize(puffin_api: PuffinPluginAPI):
-    """Entry point for PuffinPyEditor to load the plugin."""
-    return InstallerBuilderPlugin(puffin_api)
+def initialize(koromali_api: KoromaliPluginAPI):
+    """Entry point for Koromali to load the plugin."""
+    return InstallerBuilderPlugin(koromali_api)

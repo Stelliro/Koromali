@@ -1,23 +1,23 @@
 # /plugins/markdown_viewer/markdown_editor_widget.py
 import qtawesome as qta
 from typing import TYPE_CHECKING
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTextBrowser,
-                             QSplitter, QMenu, QToolButton, QFrame, QPlainTextEdit)
-from PyQt6.QtGui import (QFont, QTextCursor, QAction)
+from PyQt6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QTextBrowser,
+    QSplitter, QMenu, QToolButton, QFrame, QPlainTextEdit
+)
+from PyQt6.QtGui import QFont, QTextCursor, QAction
 from PyQt6.QtCore import QTimer, pyqtSignal, Qt
 from markdown import markdown
 
-from app_core.puffin_api import PuffinPluginAPI
-from app_core.settings_manager import settings_manager
-from ui.editor_widget import HighlightManager
+from app_core.koromali_api import KoromaliPluginAPI
 from .markdown_syntax_highlighter import MarkdownSyntaxHighlighter
 from utils.logger import log
 
 if TYPE_CHECKING:
     from app_core.theme_manager import ThemeManager
+    from app_core.settings_manager import SettingsManager
 
 class MarkdownFormattingToolbar(QWidget):
-    # This class seems fine, no changes needed.
     format_bold_requested = pyqtSignal()
     format_italic_requested = pyqtSignal()
     format_strikethrough_requested = pyqtSignal()
@@ -84,32 +84,32 @@ class MarkdownFormattingToolbar(QWidget):
 
 class MarkdownEditorWidget(QWidget):
     content_changed = pyqtSignal()
-    def __init__(self, puffin_api: PuffinPluginAPI, theme_manager: "ThemeManager", parent=None):
+    
+    def __init__(self, koromali_api: KoromaliPluginAPI, parent=None):
         super().__init__(parent)
-        from ui.editor_widget import EditorWidget
-        self.EditorWidgetClass = EditorWidget
-        self.api = puffin_api
-        self.theme_manager = theme_manager
-        self.highlight_manager = HighlightManager()
+        self.api = koromali_api
+        self.theme_manager = self.api.get_manager("theme")
+        self.settings_manager = self.api.get_manager("settings")
         self.filepath = None
         self.original_hash = 0
         self.is_syncing_scroll = False
         self.formatting_toolbar = MarkdownFormattingToolbar(self.theme_manager, self)
+        
+        self.editor = QPlainTextEdit(self)
+        self.editor.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
+        self.highlighter = MarkdownSyntaxHighlighter(self.editor.document(), self.theme_manager)
+
         self._setup_ui()
         self._connect_signals()
         self.update_theme()
-
+        
     def _setup_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        self.editor_widget = self.EditorWidgetClass(self.api, self.api.get_manager("completion"), self.highlight_manager, self.theme_manager, self)
-        self.editor_widget.text_area.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
-        # THE FIX: Pass the theme_manager instance to the highlighter's constructor.
-        self.highlighter = MarkdownSyntaxHighlighter(self.editor_widget.text_area.document(), self.theme_manager)
         self.viewer = QTextBrowser()
         self.viewer.setOpenExternalLinks(True)
         splitter = QSplitter(self)
-        splitter.addWidget(self.editor_widget)
+        splitter.addWidget(self.editor) 
         splitter.addWidget(self.viewer)
         splitter.setSizes([self.width() // 2, self.width() // 2])
         layout.addWidget(splitter)
@@ -119,28 +119,29 @@ class MarkdownEditorWidget(QWidget):
         self.update_timer.setSingleShot(True)
         self.update_timer.setInterval(250)
         self.update_timer.timeout.connect(self._render_preview)
-        text_area = self.editor_widget.text_area
-        text_area.textChanged.connect(self.update_timer.start)
-        text_area.textChanged.connect(self.content_changed.emit)
+        self.editor.textChanged.connect(self.update_timer.start)
+        self.editor.textChanged.connect(self.content_changed.emit)
+        
         self.formatting_toolbar.format_bold_requested.connect(lambda: self._wrap_selection("**"))
         self.formatting_toolbar.format_italic_requested.connect(lambda: self._wrap_selection("*"))
         self.formatting_toolbar.format_strikethrough_requested.connect(lambda: self._wrap_selection("~~"))
         self.formatting_toolbar.format_inline_code_requested.connect(lambda: self._wrap_selection("`"))
         self.formatting_toolbar.heading_level_requested.connect(self._format_heading)
         self.formatting_toolbar.code_block_requested.connect(self._insert_code_block)
-        editor_scroll = text_area.verticalScrollBar()
+        
+        editor_scroll = self.editor.verticalScrollBar()
         viewer_scroll = self.viewer.verticalScrollBar()
         editor_scroll.valueChanged.connect(self._sync_scroll_from_editor)
         viewer_scroll.valueChanged.connect(self._sync_scroll_from_viewer)
 
     def contextMenuEvent(self, event):
-        # We need to find the correct text_area widget within the editor_widget child
-        if self.editor_widget.text_area.rect().contains(event.pos()):
+        if self.editor.rect().contains(event.pos()):
             self.formatting_toolbar.show_at(event.globalPos())
         super().contextMenuEvent(event)
+
     def _wrap_selection(self, prefix, suffix=None):
         suffix = suffix or prefix
-        cursor = self.editor_widget.text_area.textCursor()
+        cursor = self.editor.textCursor()
         if not cursor.hasSelection():
             cursor.insertText(f"{prefix}text{suffix}")
             cursor.movePosition(QTextCursor.MoveOperation.Left, n=len(suffix))
@@ -148,20 +149,23 @@ class MarkdownEditorWidget(QWidget):
         else:
             selected_text = cursor.selectedText()
             cursor.insertText(f"{prefix}{selected_text}{suffix}")
-        self.editor_widget.text_area.setTextCursor(cursor)
+        self.editor.setTextCursor(cursor)
+
     def _format_heading(self, level):
-        cursor = self.editor_widget.text_area.textCursor()
+        cursor = self.editor.textCursor()
         cursor.beginEditBlock()
         cursor.movePosition(QTextCursor.MoveOperation.StartOfBlock)
         cursor.insertText(f'{"#" * level} ')
         cursor.endEditBlock()
+
     def _insert_code_block(self):
-        cursor = self.editor_widget.text_area.textCursor()
+        cursor = self.editor.textCursor()
         cursor.beginEditBlock()
         cursor.insertText("\n```python\n\n```\n")
         cursor.movePosition(QTextCursor.MoveOperation.Up, n=2)
         cursor.endEditBlock()
-        self.editor_widget.text_area.setTextCursor(cursor)
+        self.editor.setTextCursor(cursor)
+
     def _sync_scroll_factory(self, source_bar, target_bar):
         def sync_scroll(value):
             if self.is_syncing_scroll: return
@@ -171,57 +175,76 @@ class MarkdownEditorWidget(QWidget):
             target_bar.setValue(int(target_bar.maximum() * ratio))
             self.is_syncing_scroll = False
         return sync_scroll
+        
     @property
     def _sync_scroll_from_editor(self):
-        return self._sync_scroll_factory(self.editor_widget.text_area.verticalScrollBar(), self.viewer.verticalScrollBar())
+        return self._sync_scroll_factory(self.editor.verticalScrollBar(), self.viewer.verticalScrollBar())
+        
     @property
     def _sync_scroll_from_viewer(self):
-        return self._sync_scroll_factory(self.viewer.verticalScrollBar(), self.editor_widget.text_area.verticalScrollBar())
-    def load_file(self, filepath: str):
-        self.filepath = filepath
-        self.editor_widget.set_filepath(filepath)
-        try:
-            with open(filepath, 'r', encoding='utf-8') as f:
-                content = f.read()
-            self.editor_widget.set_text(content)
-            self.original_hash = hash(content)
-            log.info(f"Markdown Editor: Successfully loaded '{filepath}'.")
-        except Exception as e:
-            log.error(f"Failed to load markdown file {filepath}: {e}")
-            self.editor_widget.set_text(f"# Error\n\nCould not load file: {e}")
+        return self._sync_scroll_factory(self.viewer.verticalScrollBar(), self.editor.verticalScrollBar())
 
-    def get_content(self) -> str:
-        return self.editor_widget.get_text()
+    def set_initial_content(self, filepath: str, content: str):
+        """Sets the file path and initial content for the editor, avoiding redundant file reads."""
+        self.filepath = filepath
+        self.editor.setPlainText(content)
+        self.original_hash = hash(content)
+        self._render_preview() # Render the initial content immediately
+        log.info(f"Markdown Editor: Successfully loaded content for '{filepath}'.")
+
+    def get_text(self) -> str:
+        return self.editor.toPlainText()
 
     def _render_preview(self):
         viewer_scroll = self.viewer.verticalScrollBar()
         scroll_max = viewer_scroll.maximum() or 1
         old_pos_ratio = viewer_scroll.value() / scroll_max
-        md_text = self.get_content()
+        md_text = self.get_text()
         html = markdown(md_text, extensions=['fenced_code', 'tables', 'extra', 'sane_lists'])
         self.viewer.setHtml(html)
         QTimer.singleShot(0, lambda: viewer_scroll.setValue(int(viewer_scroll.maximum() * old_pos_ratio)))
     
     def update_theme(self):
         colors = self.theme_manager.current_theme_data.get('colors', {})
-        font_family = settings_manager.get("font_family", "Arial")
-        code_font_family = settings_manager.get("font_family", "Consolas")
-        font_size = settings_manager.get("font_size", 11)
-        bg = colors.get('editor.background', '#2b2b2b')
-        string = colors.get('syntax.string', '#6A8759')
-        accent = colors.get('accent', '#88c0d0')
-        line_highlight_bg = colors.get('editor.lineHighlightBackground', '#323232')
-        border = colors.get('input.border', '#555')
-        comment = colors.get('syntax.comment', '#808080')
+        font = QFont(self.settings_manager.get("font_family", "Consolas"), self.settings_manager.get("font_size", 11))
+        self.editor.setFont(font)
+
+        editor_bg = colors.get('editor.background', '#272e33')
+        editor_fg = colors.get('editor.foreground', '#d3c6aa')
+        selection_bg = colors.get('editor.selectionBackground', '#264f78')
+        self.editor.setStyleSheet(f"""
+            QPlainTextEdit {{
+                background-color: {editor_bg};
+                color: {editor_fg};
+                border: none;
+                selection-background-color: {selection_bg};
+            }}
+        """)
         
-        style_sheet = f""" h1, h2, h3, h4, h5, h6 {{ color: {accent}; border-bottom: 1px solid {line_highlight_bg}; padding-bottom: 4px; margin-top: 15px; }} a {{ color: {string}; text-decoration: none; }} a:hover {{ text-decoration: underline; }} p, li {{ font-size: {font_size}pt; }} pre {{ background-color: {line_highlight_bg}; border: 1px solid {border}; border-radius: 4px; padding: 10px; font-family: "{code_font_family}"; }} code {{ background-color: {line_highlight_bg}; font-family: "{code_font_family}"; border-radius: 3px; padding: 2px 4px; }} blockquote {{ color: {comment}; border-left: 3px solid {accent}; padding-left: 15px; margin-left: 5px; font-style: italic; }} table {{ border-collapse: collapse; margin: 1em 0; }} th, td {{ border: 1px solid {border}; padding: 8px; }} th {{ background-color: {line_highlight_bg}; font-weight: bold; }} """
+        viewer_bg = colors.get('editor.background', '#2b2b2b')
+        string_color = colors.get('syntax.string', '#6A8759')
+        accent_color = colors.get('accent', '#88c0d0')
+        line_highlight_bg = colors.get('editor.lineHighlightBackground', '#323232')
+        border_color = colors.get('input.border', '#555')
+        comment_color = colors.get('syntax.comment', '#808080')
+        
+        style_sheet = f"""
+            h1, h2, h3, h4, h5, h6 {{ color: {accent_color}; border-bottom: 1px solid {line_highlight_bg}; padding-bottom: 4px; margin-top: 15px; }}
+            a {{ color: {string_color}; text-decoration: none; }}
+            a:hover {{ text-decoration: underline; }}
+            p, li {{ font-size: {font.pointSize()}pt; }}
+            pre {{ background-color: {line_highlight_bg}; border: 1px solid {border_color}; border-radius: 4px; padding: 10px; font-family: "{font.family()}"; }}
+            code {{ background-color: {line_highlight_bg}; font-family: "{font.family()}"; border-radius: 3px; padding: 2px 4px; }}
+            blockquote {{ color: {comment_color}; border-left: 3px solid {accent_color}; padding-left: 15px; margin-left: 5px; font-style: italic; }}
+            table {{ border-collapse: collapse; margin: 1em 0; }}
+            th, td {{ border: 1px solid {border_color}; padding: 8px; }}
+            th {{ background-color: {line_highlight_bg}; font-weight: bold; }}
+        """
         doc = self.viewer.document()
         doc.setDefaultStyleSheet(style_sheet)
-        doc.setDefaultFont(QFont(font_family, font_size))
-        self.viewer.setStyleSheet(f"background-color: {bg}; border: none; padding: 10px;")
+        doc.setDefaultFont(font)
+        self.viewer.setStyleSheet(f"background-color: {viewer_bg}; border: none; padding: 10px;")
         
-        # Ensure editor widget and highlighter also get updated
-        self.editor_widget.update_theme()
         if self.highlighter:
             self.highlighter.rehighlight()
 

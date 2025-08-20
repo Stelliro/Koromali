@@ -1,14 +1,16 @@
-# PuffinPyEditor/app_core/theme_manager.py
+# Koromali/app_core/theme_manager.py
 import os
 import json
 import base64
 import shutil
-from typing import Dict, Any, Optional
-from PyQt6.QtGui import QColor
+from typing import Dict, Any, Optional, TYPE_CHECKING
+from PyQt6.QtGui import QColor, QGuiApplication
 
-from app_core.settings_manager import settings_manager
 from utils.logger import log, get_app_data_path
 from utils.helpers import get_base_path
+
+if TYPE_CHECKING:
+    from app_core.settings_manager import SettingsManager
 
 SVG_ARROW_PATHS = {'up': "M4 10 L8 6 L12 10", 'down': "M4 6 L8 10 L12 6"}
 
@@ -20,80 +22,93 @@ ICON_COLORS_FILE_PATH = os.path.join(APP_DATA_ROOT, "icon_colors.json")
 DEFAULT_ICON_COLORS_FILE_PATH = os.path.join(APP_BASE_PATH, "assets", "themes", "icon_colors.json")
 
 BUILT_IN_THEMES = {
-    "puffin_dark": {
-        "name": "Puffin Dark", "author": "PuffinPy", "type": "dark", "is_custom": False,
+    "Koromali_modern_dark": {
+        "name": "Koromali Modern (Dark)", "author": "Koromali", "type": "dark", "is_custom": False,
         "colors": {
-            "window.background": "#2f383e", "sidebar.background": "#2a3338", "editor.background": "#272e33",
-            "editor.foreground": "#d3c6aa", "editor.selectionBackground": "#264f78",
-            "editor.lineHighlightBackground": "#3a4145", "editor.matchingBracketBackground": "#545e62",
-            "editor.matchingBracketForeground": "#d3c6aa",
-            "editor.userHighlightBackground": "#83c0924D",
-            "editor.breakpoint.color": "#dc143c",
-            "editorGutter.background": "#2f383e", "editorGutter.foreground": "#5f6c6d",
-            "editorGutter.hoverBackground": "#83c0921a",
-            "editorLineNumber.foreground": "#5f6c6d", "editorLineNumber.activeForeground": "#d3c6aa",
-            "gutter.activeLineNumberForeground": "#d3c6aa",
-            "menu.background": "#3a4145", "menu.foreground": "#d3c6aa", "statusbar.background": "#282f34",
-            "statusbar.foreground": "#d3c6aa", "tab.activeBackground": "#272e33",
-            "tab.inactiveBackground": "#2f383e", "tab.activeForeground": "#d3c6aa",
-            "tab.inactiveForeground": "#5f6c6d", "button.background": "#424d53",
-            "button.foreground": "#d3c6aa", "input.background": "#3a4145", "input.foreground": "#d3c6aa",
-            "input.border": "#5f6c6d", "scrollbar.background": "#2f383e", "scrollbar.handle": "#424d53",
-            "scrollbar.handleHover": "#545e62", "scrollbar.handlePressed": "#545e62",
-            "accent": "#83c092", "syntax.keyword": "#e67e80", "syntax.operator": "#d3c6aa",
-            "syntax.brace": "#d3c6aa", "syntax.decorator": "#dbbc7f", "syntax.self": "#e67e80",
-            "syntax.className": "#dbbc7f", "syntax.functionName": "#83c092", "syntax.comment": "#5f6c6d",
-            "syntax.string": "#a7c080", "syntax.docstring": "#5f6c6d", "syntax.number": "#d699b6",
-            "tree.indentationGuides.stroke": "#5f6c6d", "tree.trace.color": "#83c092",
-            "git.added": "#a7c080", "git.modified": "#dbbc7f", "git.deleted": "#e67e80",
-            "git.status.foreground": "#87ceeb"
+            "window.background": "#2d2d2d", "sidebar.background": "#252525", "editor.background": "#2d2d2d",
+            "editor.foreground": "#cccccc", "editor.selectionBackground": "#3E5674",
+            "editor.lineHighlightBackground": "#3c3c3c", "editor.matchingBracketBackground": "#4a4a4a",
+            "editor.matchingBracketForeground": "#ffffff",
+            "editor.userHighlightBackground": "#4078f24D",
+            "editor.breakpoint.color": "#e06c75",
+            "editorGutter.background": "#2d2d2d", "editorGutter.foreground": "#6a6a6a",
+            "editorGutter.hoverBackground": "#4078f21a",
+            "editorLineNumber.foreground": "#6a6a6a", "editorLineNumber.activeForeground": "#cccccc",
+            "gutter.activeLineNumberForeground": "#cccccc",
+            "menu.background": "#3c3c3c", "menu.foreground": "#cccccc", "statusbar.background": "#252525",
+            "statusbar.foreground": "#cccccc", "tab.activeBackground": "#2d2d2d",
+            "tab.inactiveBackground": "#252525", "tab.activeForeground": "#ffffff",
+            "tab.inactiveForeground": "#888888", "button.background": "#4a4a4a",
+            "button.foreground": "#ffffff", "input.background": "#3c3c3c", "input.foreground": "#cccccc",
+            "input.border": "#555555", "scrollbar.background": "#252525", "scrollbar.handle": "#4a4a4a",
+            "scrollbar.handleHover": "#5a5a5a", "scrollbar.handlePressed": "#6a6a6a",
+            "accent": "#4078f2", "syntax.keyword": "#c678dd", "syntax.operator": "#56b6c2",
+            "syntax.brace": "#cccccc", "syntax.decorator": "#61afef", "syntax.self": "#e5c07b",
+            "syntax.className": "#e5c07b", "syntax.functionName": "#61afef", "syntax.comment": "#7f848e",
+            "syntax.string": "#98c379", "syntax.docstring": "#7f848e", "syntax.number": "#d19a66",
+            "tree.indentationGuides.stroke": "#555555", "tree.trace.color": "#4078f2",
+            "git.added": "#98c379", "git.modified": "#e5c07b", "git.deleted": "#e06c75",
+            "git.status.foreground": "#61afef",
+            "list.hoverBackground": "#3c3c3c",
+            "list.activeSelectionBackground": "#4078f2",
+            "list.activeSelectionForeground": "#ffffff",
+            "list.inactiveSelectionBackground": "#3c3c3c",
+            "list.inactiveSelectionForeground": "#cccccc"
         }
     },
-    "puffin_light": {
-        "name": "Puffin Light", "author": "PuffinPy", "type": "light", "is_custom": False,
+    "Koromali_modern_light": {
+        "name": "Koromali Modern (Light)", "author": "Koromali", "type": "light", "is_custom": False,
         "colors": {
-            "window.background": "#f5f5f5", "sidebar.background": "#ECECEC", "editor.background": "#ffffff",
-            "editor.foreground": "#000000", "editor.selectionBackground": "#add6ff",
-            "editor.lineHighlightBackground": "#e0e8f0", "editor.matchingBracketBackground": "#c0c8d0",
-            "editor.matchingBracketForeground": "#000000",
+            "window.background": "#ffffff", "sidebar.background": "#f5f5f5", "editor.background": "#ffffff",
+            "editor.foreground": "#333333", "editor.selectionBackground": "#b3d7ff",
+            "editor.lineHighlightBackground": "#f0f0f0", "editor.matchingBracketBackground": "#cce5ff",
+            "editor.matchingBracketForeground": "#333333",
             "editor.userHighlightBackground": "#007acc4D",
-            "editor.breakpoint.color": "#ff0000",
-            "editorGutter.background": "#f5f5f5", "editorGutter.foreground": "#505050",
+            "editor.breakpoint.color": "#e45649",
+            "editorGutter.background": "#ffffff", "editorGutter.foreground": "#aaaaaa",
             "editorGutter.hoverBackground": "#007acc1a",
-            "editorLineNumber.foreground": "#9e9e9e", "editorLineNumber.activeForeground": "#000000",
-            "gutter.activeLineNumberForeground": "#000000",
-            "menu.background": "#e0e0e0", "menu.foreground": "#000000", "statusbar.background": "#007acc",
+            "editorLineNumber.foreground": "#aaaaaa", "editorLineNumber.activeForeground": "#333333",
+            "gutter.activeLineNumberForeground": "#333333",
+            "menu.background": "#f0f0f0", "menu.foreground": "#333333", "statusbar.background": "#007acc",
             "statusbar.foreground": "#ffffff", "tab.activeBackground": "#ffffff",
-            "tab.inactiveBackground": "#f5f5f5", "tab.activeForeground": "#000000",
-            "tab.inactiveForeground": "#555555", "button.background": "#E0E0E0",
-            "button.foreground": "#000000", "input.background": "#ffffff", "input.foreground": "#000000",
-            "input.border": "#D0D0D0", "scrollbar.background": "#f0f0f0", "scrollbar.handle": "#cccccc",
+            "tab.inactiveBackground": "#f5f5f5", "tab.activeForeground": "#333333",
+            "tab.inactiveForeground": "#888888", "button.background": "#f0f0f0",
+            "button.foreground": "#333333", "input.background": "#ffffff", "input.foreground": "#333333",
+            "input.border": "#cccccc", "scrollbar.background": "#f5f5f5", "scrollbar.handle": "#cccccc",
             "scrollbar.handleHover": "#bbbbbb", "scrollbar.handlePressed": "#aaaaaa",
-            "accent": "#007ACC", "syntax.keyword": "#0000ff", "syntax.operator": "#000000",
-            "syntax.brace": "#a00050", "syntax.decorator": "#267f99", "syntax.self": "#800080",
-            "syntax.className": "#267f99", "syntax.functionName": "#795e26", "syntax.comment": "#008000",
-            "syntax.string": "#a31515", "syntax.docstring": "#a31515", "syntax.number": "#098658",
-            "tree.indentationGuides.stroke": "#D0D0D0", "tree.trace.color": "#007ACC",
+            "accent": "#007acc", "syntax.keyword": "#d73a49", "syntax.operator": "#333333",
+            "syntax.brace": "#333333", "syntax.decorator": "#6f42c1", "syntax.self": "#e36209",
+            "syntax.className": "#e5c07b", "syntax.functionName": "#005cc5", "syntax.comment": "#6a737d",
+            "syntax.string": "#032f62", "syntax.docstring": "#6a737d", "syntax.number": "#005cc5",
+            "tree.indentationGuides.stroke": "#cccccc", "tree.trace.color": "#007acc",
             "git.added": "#28a745", "git.modified": "#f1e05a", "git.deleted": "#d73a49",
-            "git.status.foreground": "#007ACC"
+            "git.status.foreground": "#007acc",
+            "list.hoverBackground": "#f0f0f0",
+            "list.activeSelectionBackground": "#007acc",
+            "list.activeSelectionForeground": "#ffffff",
+            "list.inactiveSelectionBackground": "#dcdcdc",
+            "list.inactiveSelectionForeground": "#333333"
         }
     }
 }
 
-
 def get_arrow_svg_uri(direction: str, color: str) -> str:
-    path_data = SVG_ARROW_PATHS.get(direction, "");
-    if not path_data: return ""
-    svg_content = f'<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><path fill="{color}" d="{path_data}" /></svg>'
-    b64_content = base64.b64encode(svg_content.encode('utf-8')).decode('utf-8');
+    path_data = SVG_ARROW_PATHS.get(direction, "")
+    if not path_data:
+        return ""
+    # Ensure color is a valid hex string for SVG
+    safe_color = QColor(color).name()
+    svg_content = f'<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><path fill="none" stroke="{safe_color}" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="{path_data}"/></svg>'
+    b64_content = base64.b64encode(svg_content.encode('utf-8')).decode('utf-8')
     return f"data:image/svg+xml;base64,{b64_content}"
 
 
 class ThemeManager:
-    def __init__(self):
+    def __init__(self, settings_manager: 'SettingsManager'):
+        self.settings_manager = settings_manager
         self.all_themes_data: Dict[str, Dict] = {}
         self.icon_colors: Dict[str, str] = {}
-        self.current_theme_id: str = "puffin_dark"
+        self.current_theme_id: str = "Koromali_modern_dark"
         self.current_theme_data: Dict[str, Any] = {}
         self.reload_themes()
         log.info(f"ThemeManager initialized. Current theme: '{self.current_theme_id}'")
@@ -101,89 +116,95 @@ class ThemeManager:
     def reload_themes(self):
         self.icon_colors = self._load_icon_colors()
         self.all_themes_data = self._load_all_themes()
-        last_theme_id = settings_manager.get("last_theme_id", "puffin_dark")
+        last_theme_id = self.settings_manager.get("last_theme_id", "Koromali_modern_dark")
         if last_theme_id not in self.all_themes_data:
-            last_theme_id = "puffin_dark"
-            settings_manager.set("last_theme_id", last_theme_id)
+            last_theme_id = "Koromali_modern_dark"
+            self.settings_manager.set("last_theme_id", last_theme_id)
         self.current_theme_id = last_theme_id
-        # We don't call set_theme here anymore to avoid circular dependencies
         self.current_theme_data = self.all_themes_data.get(self.current_theme_id, {})
         if 'colors' in self.current_theme_data:
             self.current_theme_data['colors']['icon.colors'] = self.icon_colors
 
-    def _load_icon_colors(self) -> Dict[str, str]:
-        """Loads default and user icon colors, with user settings overriding defaults."""
-        colors = {}
-        if not os.path.exists(ICON_COLORS_FILE_PATH) and os.path.exists(DEFAULT_ICON_COLORS_FILE_PATH):
+    def _load_and_repair_json(self, user_path: str, default_path: str) -> Dict:
+        """Loads a user JSON file, repairing it from default if corrupt or missing."""
+        if not os.path.exists(default_path):
+            log.error(f"FATAL: Default asset file is missing, cannot load or repair: {default_path}")
+            return {}
+
+        user_data = None
+        should_repair = not os.path.exists(user_path)
+
+        if os.path.exists(user_path):
             try:
-                os.makedirs(os.path.dirname(ICON_COLORS_FILE_PATH), exist_ok=True)
-                shutil.copy2(DEFAULT_ICON_COLORS_FILE_PATH, ICON_COLORS_FILE_PATH)
-                log.info(f"Copied default icon colors to {ICON_COLORS_FILE_PATH}")
+                with open(user_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    if content.strip():
+                        user_data = json.loads(content)
+                        if not isinstance(user_data, dict):
+                            log.warning(f"User data at {user_path} is not a dictionary. Will repair.")
+                            should_repair = True
+                    else:
+                        log.warning(f"User file at {user_path} is empty. Will repair.")
+                        should_repair = True
+            except (IOError, json.JSONDecodeError):
+                log.warning(f"User file at {user_path} is corrupt. Will repair.")
+                should_repair = True
+
+        if should_repair:
+            try:
+                os.makedirs(os.path.dirname(user_path), exist_ok=True)
+                shutil.copy2(default_path, user_path)
+                log.info(f"Initialized/repaired user file at {user_path} from default.")
+                with open(default_path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
             except Exception as e:
-                log.error(f"Failed to copy default icon colors: {e}")
+                log.error(f"Failed to copy/read default file to {user_path}: {e}")
+                return {}
+        
+        return user_data
 
-        try:
-            with open(DEFAULT_ICON_COLORS_FILE_PATH, 'r', encoding='utf-8') as f:
-                colors.update(json.load(f))
-            if os.path.exists(ICON_COLORS_FILE_PATH):
-                with open(ICON_COLORS_FILE_PATH, 'r', encoding='utf-8') as f:
-                    colors.update(json.load(f))
-        except (IOError, json.JSONDecodeError) as e:
-            log.error(f"Could not load icon color schemes: {e}")
-
-        return colors
+    def _load_icon_colors(self) -> Dict[str, str]:
+        return self._load_and_repair_json(ICON_COLORS_FILE_PATH, DEFAULT_ICON_COLORS_FILE_PATH)
 
     def _load_all_themes(self) -> Dict[str, Dict]:
         all_themes = BUILT_IN_THEMES.copy()
-        custom_themes_path = os.path.join(get_app_data_path(), "custom_themes.json")
-        default_custom_themes_path = os.path.join(get_base_path(), "assets", "themes", "custom_themes.json")
+        custom_themes = self._load_and_repair_json(CUSTOM_THEMES_FILE_PATH, DEFAULT_CUSTOM_THEMES_FILE_PATH)
 
-        if not os.path.exists(custom_themes_path) and os.path.exists(default_custom_themes_path):
-            try:
-                os.makedirs(os.path.dirname(custom_themes_path), exist_ok=True)
-                shutil.copy2(default_custom_themes_path, custom_themes_path)
-            except Exception as e:
-                log.error(f"Failed to copy default custom themes: {e}")
-
-        if os.path.exists(custom_themes_path):
-            try:
-                with open(custom_themes_path, 'r', encoding='utf-8') as f:
-                    custom_themes = json.load(f)
-                    for theme in custom_themes.values():
-                        theme['is_custom'] = True
-                    all_themes.update(custom_themes)
-            except Exception as e:
-                log.error(f"Error loading custom themes: {e}")
+        for theme_id, theme_data in custom_themes.items():
+            theme_data['is_custom'] = True
+            all_themes[theme_id] = theme_data
+        
         return all_themes
 
     def get_available_themes_for_ui(self) -> Dict[str, str]:
         return {tid: d.get("name", tid) for tid, d in
                 sorted(self.all_themes_data.items(), key=lambda i: i[1].get("name", i[0]).lower())}
 
-    def set_theme(self, theme_id: str, app_instance: Optional['QApplication'] = None):
-        if theme_id not in self.all_themes_data:
-            theme_id = "puffin_dark"
+    def set_theme(self, theme_id: str, app_instance: Optional[QGuiApplication] = None):
+        if theme_id not in self.all_themes_data: theme_id = "Koromali_modern_dark"
         self.current_theme_id = theme_id
         self.current_theme_data = self.all_themes_data.get(theme_id, {})
 
         if 'colors' not in self.current_theme_data:
-            log.warning(f"Theme '{theme_id}' is missing the 'colors' dictionary. UI may not render correctly.")
+            log.warning(f"Theme '{theme_id}' is missing the 'colors' dictionary.")
         else:
             self.current_theme_data['colors']['icon.colors'] = self.icon_colors
 
-        settings_manager.set("last_theme_id", theme_id)
-        # Import moved here to avoid circular dependency
+        self.settings_manager.set("last_theme_id", theme_id)
         from PyQt6.QtWidgets import QApplication
         self.apply_theme_to_app(app_instance or QApplication.instance())
         log.info(f"Theme set to '{self.current_theme_data.get('name', 'Unknown')}'")
 
     def add_or_update_custom_theme(self, theme_id: str, theme_data: dict):
-        custom_themes_path = os.path.join(get_app_data_path(), "custom_themes.json")
+        custom_themes_path = CUSTOM_THEMES_FILE_PATH
         try:
             custom_themes = {}
             if os.path.exists(custom_themes_path):
-                with open(custom_themes_path, 'r', encoding='utf-8') as f:
-                    custom_themes = json.load(f)
+                 with open(custom_themes_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    if content.strip():
+                        custom_themes = json.loads(content)
+
             custom_themes[theme_id] = theme_data
             with open(custom_themes_path, 'w', encoding='utf-8') as f:
                 json.dump(custom_themes, f, indent=4)
@@ -192,10 +213,10 @@ class ThemeManager:
             log.error(f"Failed to save custom theme '{theme_id}': {e}")
 
     def delete_custom_theme(self, theme_id: str):
-        custom_themes_path = os.path.join(get_app_data_path(), "custom_themes.json")
+        custom_themes_path = CUSTOM_THEMES_FILE_PATH
         try:
             custom_themes = {}
-            if os.path.exists(custom_themes_path):
+            if os.path.exists(custom_themes_path) and os.path.getsize(custom_themes_path) > 0:
                 with open(custom_themes_path, 'r', encoding='utf-8') as f:
                     custom_themes = json.load(f)
             if theme_id in custom_themes:
@@ -206,130 +227,161 @@ class ThemeManager:
         except (IOError, json.JSONDecodeError) as e:
             log.error(f"Failed to delete custom theme '{theme_id}': {e}")
 
-    def apply_theme_to_app(self, app: Optional['QApplication']):
+    def apply_theme_to_app(self, app: Optional[QGuiApplication]):
         if not app or not self.current_theme_data: return
         colors = self.current_theme_data.get("colors", {})
 
         def c(key: str, fb: str) -> str: return colors.get(key, fb)
 
-        def adj(h: str, f: int) -> str:
+        def adj(h: str, f: int, a: Optional[float] = None) -> str:
+            """Adjusts color lightness by a factor 'f'."""
             c_obj = QColor(h)
-            is_light_theme = self.current_theme_data.get('type', 'dark') == 'light'
-            return c_obj.darker(f).name() if f > 100 and is_light_theme else c_obj.lighter(f).name()
+            # Use HSL for more intuitive lightness adjustments
+            h_val, s, l_val, alpha = c_obj.getHslF()
+            
+            # f is a percentage, e.g., 110 for 10% lighter, 90 for 10% darker
+            new_lightness = min(max(l_val * (f / 100.0), 0.0), 1.0)
+            
+            final_color = QColor.fromHslF(h_val, s, new_lightness, alpha)
 
-        ac, wb, bb, bf, ib, igf, ibd, sb = (
-            c('accent', '#83c092'), c('window.background', '#2f383e'),
-            c('button.background', '#424d53'), c('button.foreground', '#d3c6aa'),
-            c('input.background', '#3a4145'), c('editor.foreground', '#d3c6aa'),
-            c('input.border', '#5f6c6d'), c('sidebar.background', '#2a3338')
-        )
+            if a is not None:
+                final_color.setAlphaF(a)
+            
+            return f"rgba({final_color.red()}, {final_color.green()}, {final_color.blue()}, {final_color.alphaF()})"
 
-        arrow_color = c('editor.foreground', '#d3c6aa')
-        combo_arrow, spin_up, spin_down = (
-            get_arrow_svg_uri('down', arrow_color),
-            get_arrow_svg_uri('up', arrow_color),
-            get_arrow_svg_uri('down', arrow_color)
-        )
+        is_light = self.current_theme_data.get('type') == 'light'
+        hover_factor = 85 if is_light else 130
+        pressed_factor = 75 if is_light else 150
+        
+        # Define color variables from theme
+        ac, wb, sb, bb, bf, ib, igf, ibd = (c('accent', '#007acc'), c('window.background', '#2d2d2d'),
+            c('sidebar.background', '#252525'), c('button.background', '#4a4a4a'), c('button.foreground', '#ffffff'),
+            c('input.background', '#3c3c3c'), c('editor.foreground', '#cccccc'), c('input.border', '#555555'))
+        
+        menu_bg, menu_fg = c('menu.background', '#3c3c3c'), c('menu.foreground', '#cccccc')
+        status_bg, status_fg = c('statusbar.background', '#252525'), c('statusbar.foreground', '#cccccc')
+        
+        tab_active_bg, tab_inactive_bg = c('tab.activeBackground', '#2d2d2d'), c('tab.inactiveBackground', '#252525')
+        tab_active_fg, tab_inactive_fg = c('tab.activeForeground', '#ffffff'), c('tab.inactiveForeground', '#888888')
+        
+        list_hover_bg = c('list.hoverBackground', adj(sb, 110))
+        list_active_bg, list_active_fg = c('list.activeSelectionBackground', ac), c('list.activeSelectionForeground', '#ffffff')
+        list_inactive_bg, list_inactive_fg = c('list.inactiveSelectionBackground', adj(sb, 105)), c('list.inactiveSelectionForeground', igf)
+
+        scrollbar_bg, scroll_handle = c('scrollbar.background', sb), c('scrollbar.handle', bb)
+        
+        arrow_color = '#000000' if is_light else '#ffffff'
+        combo_arrow, spin_up, spin_down = (get_arrow_svg_uri('down', arrow_color), get_arrow_svg_uri('up', arrow_color), get_arrow_svg_uri('down', arrow_color))
 
         stylesheet = f"""
-            QWidget {{ background-color: {wb}; color: {igf}; border: none; }}
-            QMainWindow, QDialog {{ background-color: {wb}; }}
-            QSplitter::handle {{ background-color: {sb}; width: 1px; image: none; }}
-            QSplitter::handle:hover {{ background-color: {ac}; }}
-
-            /* Buttons */
-            QPushButton {{
-                background-color: {bb}; color: {bf}; border: 1px solid {ibd};
-                border-radius: 4px; padding: 6px 12px; min-width: 80px;
+            QMainWindow, QDialog {{
+                background-color: {wb};
+                color: {igf};
             }}
-            QPushButton:hover {{ background-color: {adj(bb, 115)}; border-color: {ac}; }}
-            QPushButton:pressed {{ background-color: {adj(bb, 95)}; }}
-            QPushButton:disabled {{
-                background-color: {adj(bb, 105)}; color: {c('editorGutter.foreground', '#888')};
-                border-color: {adj(ibd, 110)};
+            QDockWidget > QWidget {{
+                background-color: {sb};
             }}
-            QToolButton {{ background: transparent; border: none; border-radius: 4px; padding: 4px; }}
-            QToolButton:hover {{ background-color: {adj(bb, 120)}; }}
-
-            /* Menus and Bars */
-            QMenuBar {{ background-color: {adj(wb, 105)}; border-bottom: 1px solid {ibd}; }}
-            QMenuBar::item {{ padding: 6px 12px; }}
-            QMenuBar::item:selected {{ background-color: {ac}; color: {c('button.foreground', '#000')}; }}
-            QMenu {{ background-color: {c('menu.background', '#3a4145')}; border: 1px solid {ibd}; padding: 4px; }}
-            QMenu::item {{ padding: 6px 24px; }}
-            QMenu::item:selected {{ background-color: {ac}; color: {c('button.foreground', '#000')}; }}
-            QStatusBar {{
-                background-color: {c('statusbar.background', '#282f34')}; border-top: 1px solid {ibd};
-                color: {c('statusbar.foreground', '#d3c6aa')};
+            QDockWidget {{
+                background-color: {sb};
+                color: {igf};
+                titlebar-close-icon: url(none);
+                titlebar-normal-icon: url(none);
             }}
-
-            /* THEME: Signature Tab Bar Styling */
-            QTabWidget::pane {{ border: none; }}
-            QTabBar::tab {{
-                background: transparent; color: {c('tab.inactiveForeground', '#5f6c6d')};
-                padding: 8px 15px; border: none; border-bottom: 2px solid transparent;
-            }}
-            QTabBar::tab:hover {{ background: {adj(wb, 110)}; }}
-            QTabBar::tab:selected {{ color: {c('tab.activeForeground', '#d3c6aa')}; border-bottom: 2px solid {ac}; }}
-            /* Specific style for editor tabs to blend the bottom border */
-            QTabWidget#MainTabWidget > QTabBar::tab:selected {{ border-bottom-color: {c('editor.background', '#272e33')}; }}
-
-            /* THEME: Signature Toolbar Styling */
-            QFrame#ExplorerToolbar {{
-                background-color: {c('sidebar.background', '#2a3338')};
-                border-bottom: 1px solid {c('input.border', '#5f6c6d')};
-            }}
-
-            /* Inputs */
-            QLineEdit, QTextEdit, QPlainTextEdit, QAbstractSpinBox, QComboBox {{
-                background-color: {ib}; border: 1px solid {ibd}; border-radius: 4px; padding: 5px;
-            }}
-            QLineEdit:focus, QAbstractSpinBox:focus, QComboBox:focus, QTextEdit:focus, QPlainTextEdit:focus {{
-                border: 1px solid {ac};
-            }}
-
-            /* Combo & Spin Box Arrows */
-            QComboBox::drop-down {{
-                subcontrol-origin: padding; subcontrol-position: top right;
-                width: 20px; border-left: 1px solid {ibd};
-            }}
-            QComboBox::down-arrow {{ image: url({combo_arrow}); width: 8px; height: 8px; }}
-            QSpinBox {{ padding-right: 22px; }}
-            QSpinBox::up-button, QSpinBox::down-button {{
-                subcontrol-origin: border; width: 22px; background-color: transparent;
-                border-left: 1px solid {ibd};
-            }}
-            QSpinBox::up-button:hover, QSpinBox::down-button:hover {{ background-color: {adj(ib, 120)}; }}
-            QSpinBox::up-button {{ subcontrol-position: top right; }}
-            QSpinBox::down-button {{ subcontrol-position: bottom right; }}
-            QSpinBox::up-arrow {{ image: url({spin_up}); width: 8px; height: 8px; }}
-            QSpinBox::down-arrow {{ image: url({spin_down}); width: 8px; height: 8px; }}
-
-            /* Item Views */
-            QAbstractItemView {{ background-color: {sb}; outline: 0; }}
-            QTreeView, QListWidget, QTableWidget, QTreeWidget {{ alternate-background-color: {adj(sb, 103)}; }}
-            QTreeView::item:hover, QListWidget::item:hover {{ background-color: {adj(sb, 120)}; }}
-            QTreeView::item:selected {{ background-color: {ac}; color: {c('button.foreground', '#000')}; }}
-            QHeaderView::section {{ background-color: {adj(sb, 110)}; padding: 4px; border: 1px solid {wb}; }}
             QDockWidget::title {{
-                background-color: {adj(wb, 105)}; text-align: left; padding: 5px;
+                background-color: {adj(sb, 95 if is_light else 115)};
+                padding: 5px;
                 border-bottom: 1px solid {ibd};
             }}
-            QGroupBox {{
-                font-weight: bold; border: 1px solid {adj(ibd, 115)};
-                border-radius: 6px; margin-top: 1em;
+            QTreeView, QListWidget {{
+                background-color: {sb};
+                border: none;
+                color: {igf};
+                alternate-background-color: {adj(sb, 98 if is_light else 104)};
             }}
-            QGroupBox::title {{
-                subcontrol-origin: margin; left: 10px; padding: 0 4px;
-                color: {ac}; background-color: {wb};
+            QTreeView::item:hover, QListWidget::item:hover {{ background-color: {list_hover_bg}; }}
+            QTreeView::item:selected:active, QListWidget::item:selected:active {{ background-color: {list_active_bg}; color: {list_active_fg}; }}
+            QTreeView::item:selected:!active, QListWidget::item:selected:!active {{ background-color: {list_inactive_bg}; color: {list_inactive_fg}; }}
+            QHeaderView::section {{ background-color: {adj(sb, 110)}; padding: 4px; border: 1px solid {ibd}; }}
+            QFrame#ExplorerToolbar {{ background-color: {adj(sb, 105)}; border-bottom: 1px solid {ibd}; }}
+
+            /* --- Button Styles --- */
+            /* Regular buttons are hollow, using the accent color */
+            QPushButton {{
+                background-color: transparent;
+                color: {ac};
+                border: 1px solid {ac};
+                border-radius: 4px;
+                padding: 5px 10px;
+            }}
+            QPushButton:hover {{
+                background-color: {ac};
+                color: {bf};
+            }}
+            QPushButton:pressed {{
+                background-color: {adj(ac, 90 if is_light else 110)};
+                color: {bf};
+            }}
+            QPushButton:disabled {{
+                background-color: transparent;
+                color: {adj(ac, 100, 0.4)};
+                border: 1px solid {adj(ac, 100, 0.4)};
             }}
 
-            /* Scrollbar */
-            QScrollBar:vertical {{ width: 10px; }}
-            QScrollBar:horizontal {{ height: 10px; }}
-            QScrollBar::handle {{ background: {c('scrollbar.handle', '#424d53')}; border-radius: 5px; min-height: 20px; }}
-            QScrollBar::handle:hover {{ background: {c('scrollbar.handleHover', '#545e62')}; }}
-            QScrollBar::add-line, QScrollBar::sub-line {{ height: 0px; width: 0px; }}
-            QScrollBar::add-page, QScrollBar::sub-page {{ background: none; }}
+            /* Tool buttons (for toolbars) are flat and transparent */
+            QToolButton {{
+                background: transparent;
+                border: 1px solid transparent;
+                padding: 4px;
+                margin: 1px;
+                border-radius: 4px;
+            }}
+            QToolButton:hover {{
+                background-color: {adj(sb, 105 if is_light else 120)};
+            }}
+            QToolButton:pressed {{
+                background-color: {adj(sb, 95 if is_light else 130)};
+            }}
+            QToolButton:checked {{
+                background-color: {adj(ac, 100, 0.3)};
+                border: 1px solid {adj(ac, 100, 0.5)};
+            }}
+
+            QLineEdit, QTextEdit, QPlainTextEdit, QSpinBox {{ background-color: {ib}; color: {igf}; border: 1px solid {ibd}; border-radius: 4px; padding: 4px; }}
+            QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus, QSpinBox:focus {{ border: 1px solid {ac}; }}
+            QComboBox {{ background-color: {bb}; border: 1px solid {ibd}; border-radius: 4px; padding: 4px; }}
+            QComboBox::drop-down {{ border: none; }}
+            QComboBox::down-arrow {{ image: url({combo_arrow}); }}
+            QComboBox QAbstractItemView {{ background-color: {menu_bg}; border: 1px solid {ibd}; color: {menu_fg}; selection-background-color: {ac}; }}
+            QSpinBox::up-button, QSpinBox::down-button {{ border: none; }}
+            QSpinBox::up-arrow {{ image: url({spin_up}); }}
+            QSpinBox::down-arrow {{ image: url({spin_down}); }}
+            QMenuBar {{ background-color: {wb}; border-bottom: 1px solid {ibd}; }}
+            QMenuBar::item {{ padding: 5px 10px; background: transparent; }}
+            QMenuBar::item:selected {{ background-color: {adj(wb, 95 if is_light else 120)}; }}
+            QMenu {{ background-color: {menu_bg}; border: 1px solid {ibd}; color: {menu_fg}; }}
+            QMenu::item:selected {{ background-color: {ac}; color: {list_active_fg}; }}
+            QStatusBar {{ background-color: {status_bg}; color: {status_fg}; }}
+            QTabWidget::pane {{ border: none; }}
+            QTabBar::tab {{
+                background: {tab_inactive_bg}; color: {tab_inactive_fg};
+                padding: 8px 15px; border: 1px solid {ibd}; border-bottom: none;
+                border-top-left-radius: 4px; border-top-right-radius: 4px;
+            }}
+            QTabBar::tab:selected {{ background: {tab_active_bg}; color: {tab_active_fg}; }}
+            QTabBar::tab:hover {{ background: {adj(tab_inactive_bg, hover_factor)}; }}
+            QSplitter::handle {{ background-color: {wb}; }}
+            QSplitter::handle:horizontal {{ width: 1px; }}
+            QSplitter::handle:vertical {{ height: 1px; }}
+            QSplitter::handle:hover {{ background-color: {ac}; }}
+            QScrollBar:vertical {{ border: none; background: {scrollbar_bg}; width: 14px; margin: 0; }}
+            QScrollBar::handle:vertical {{ background: {scroll_handle}; min-height: 25px; border-radius: 7px; }}
+            QScrollBar::handle:vertical:hover {{ background: {adj(scroll_handle, hover_factor)}; }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0px; }}
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{ background: none; }}
+            QScrollBar:horizontal {{ border: none; background: {scrollbar_bg}; height: 14px; margin: 0; }}
+            QScrollBar::handle:horizontal {{ background: {scroll_handle}; min-width: 25px; border-radius: 7px; }}
+            QScrollBar::handle:horizontal:hover {{ background: {adj(scroll_handle, hover_factor)}; }}
+            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width: 0px; }}
+            QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {{ background: none; }}
         """
         app.setStyleSheet(stylesheet)

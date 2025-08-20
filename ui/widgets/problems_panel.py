@@ -1,10 +1,12 @@
-# PuffinPyEditor/ui/widgets/problems_panel.py
+# Koromali/ui/widgets/problems_panel.py
 import os
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, TYPE_CHECKING
 from PyQt6.QtWidgets import QTreeWidget, QTreeWidgetItem, QHeaderView, QWidget
 from PyQt6.QtCore import pyqtSignal, Qt
 from utils.logger import log
 
+if TYPE_CHECKING:
+    from app_core.theme_manager import ThemeManager
 
 class ProblemsPanel(QTreeWidget):
     """
@@ -34,6 +36,10 @@ class ProblemsPanel(QTreeWidget):
 
         self.itemDoubleClicked.connect(self._on_item_double_clicked)
         log.info("ProblemsPanel initialized as QTreeWidget.")
+        
+    def update_theme(self):
+        # Placeholder for theme updates if specific styling is needed in the future
+        pass
 
     def update_problems(self, problems_by_file: Dict[str, List[Dict]]):
         """

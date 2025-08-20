@@ -1,8 +1,8 @@
 {
     "id": "plugin_initializer",
     "name": "Plugin Initializer",
-    "author": "PuffinPy AI",
+    "author": "Koromali AI",
     "version": "1.0.0",
-    "description": "A developer tool to quickly scaffold new plugins for PuffinPyEditor.",
+    "description": "A developer tool to quickly scaffold new plugins for Koromali.",
     "entry_point": "plugin_main.py"
 }

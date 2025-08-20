@@ -1,8 +1,8 @@
 {
     "id": "terminal",
     "name": "Integrated Terminal",
-    "author": "PuffinPy Team",
-    "version": "1.0.0",
-    "description": "Provides a dockable, theme-aware terminal that runs a native shell within the editor.",
+    "author": "Koromali Team",
+    "version": "1.1.0",
+    "description": "Provides a dockable, theme-aware terminal with virtual environment management.",
     "entry_point": "plugin_main.py"
 }

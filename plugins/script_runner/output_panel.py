@@ -1,17 +1,19 @@
-# PuffinPyEditor/plugins/script_runner/output_panel.py
+# Koromali/plugins/script_runner/output_panel.py
 from typing import TYPE_CHECKING
 from PyQt6.QtWidgets import QDockWidget, QTextEdit, QVBoxLayout, QWidget, QPushButton, QHBoxLayout
 from PyQt6.QtGui import QFont, QColor, QTextCursor
 from PyQt6.QtCore import Qt
-from app_core.settings_manager import settings_manager
 
 if TYPE_CHECKING:
     from app_core.theme_manager import ThemeManager
+    from app_core.settings_manager import SettingsManager
+
 
 class OutputPanel(QDockWidget):
-    def __init__(self, theme_manager: "ThemeManager", parent=None):
+    def __init__(self, theme_manager: "ThemeManager", settings_manager: "SettingsManager", parent=None):
         super().__init__("Output", parent)
         self.theme_manager = theme_manager
+        self.settings_manager = settings_manager
         self.setObjectName("OutputPanelDock")
         self.setAllowedAreas(Qt.DockWidgetArea.BottomDockWidgetArea |
                              Qt.DockWidgetArea.RightDockWidgetArea)
@@ -38,21 +40,22 @@ class OutputPanel(QDockWidget):
 
     def append_output(self, text: str, is_error: bool = False):
         """
-        Appends text to the output panel, handling color for errors and ensuring
-        correct line endings.
+        Appends text to the output panel, handling color for errors.
+
+        This method uses a QTextCursor to ensure text is appended without
+        introducing extra newlines, preserving the raw output from the process.
         """
-        # --- FIX: Use insertPlainText with a cursor to prevent extra newlines ---
         cursor = self.output_text_edit.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.End)
         self.output_text_edit.setTextCursor(cursor)
-        
+
         original_format = cursor.charFormat()
-        
+
         if is_error:
             colors = self.theme_manager.current_theme_data.get("colors", {})
             error_color_hex = colors.get("syntax.comment", "#FF4444")
             error_color = QColor(error_color_hex if error_color_hex else "#FF0000")
-            
+
             error_format = cursor.charFormat()
             error_format.setForeground(error_color)
             cursor.setCharFormat(error_format)
@@ -60,7 +63,7 @@ class OutputPanel(QDockWidget):
         # Insert text without adding an automatic newline
         cursor.insertText(text)
 
-        # Restore the original format
+        # Restore the original format for subsequent text
         if is_error:
             cursor.setCharFormat(original_format)
 
@@ -68,13 +71,12 @@ class OutputPanel(QDockWidget):
         scrollbar = self.output_text_edit.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
 
-
     def clear_output(self):
         self.output_text_edit.clear()
 
     def update_theme(self):
-        font_family = settings_manager.get("font_family", "Consolas")
-        font_size = settings_manager.get("font_size", 10)
+        font_family = self.settings_manager.get("font_family", "Consolas")
+        font_size = self.settings_manager.get("font_size", 10)
         font = QFont(font_family, font_size)
         self.output_text_edit.setFont(font)
 
