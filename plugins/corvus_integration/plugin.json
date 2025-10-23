@@ -1,7 +1,7 @@
 {
     "id": "corvus_integration",
     "name": "Corvus Integration",
-    "author": "Stelliro",
+    "author": "Koromali Team",
     "version": "1.0.0",
     "description": "Provides a chat interface to interact with the local Corvus assistant.",
     "entry_point": "plugin_main.py"

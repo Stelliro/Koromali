@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QTabWidget,
 from PyQt6.QtGui import QFont, QDesktopServices, QColor
 from PyQt6.QtCore import Qt, QSize, pyqtSignal, QUrl
 
-from app_core.config import APP_NAME
+from app_core.config import APP_NAME, GITHUB_PLUGINS_REPO
 from utils.logger import log
 
 if sys.platform == "win32":
@@ -165,7 +165,8 @@ class PreferencesDialog(QDialog):
         self.staged_repos = [r.copy() for r in self.settings.get("source_control_repos", [])]
         self.staged_active_repo_id = self.settings.get("active_update_repo_id")
         self._populate_repo_list()
-        self.plugins_repo_edit.setText(self.settings.get("plugins_distro_repo", "Stelliro/Koromali-plugins"))
+        default_repo = GITHUB_PLUGINS_REPO or ""
+        self.plugins_repo_edit.setText(self.settings.get("plugins_distro_repo", default_repo))
 
     def _connect_ui_changed_signals(self):
         for w in self.findChildren((QComboBox, QSpinBox, QCheckBox, QFontComboBox, QLineEdit)):

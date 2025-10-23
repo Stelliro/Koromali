@@ -2,6 +2,8 @@
 import json
 import os
 from typing import Any, Dict
+
+from app_core.config import GITHUB_PLUGINS_REPO
 from utils.logger import log, get_app_data_path
 
 APP_DATA_ROOT = get_app_data_path()
@@ -18,7 +20,7 @@ DEFAULT_SETTINGS = {
     "explorer_expanded_paths": [], "project_customizations": {},
     "explorer_show_hidden_files": False,
     "python_interpreter_path": "", "source_control_repos": [],
-    "active_update_repo_id": None, "plugins_distro_repo": "Stelliro/Koromali-plugins",
+    "active_update_repo_id": None, "plugins_distro_repo": GITHUB_PLUGINS_REPO or "",
     "commit_message_history": [], "max_commit_history": 50, "ai_export_loadouts": {},
     "ai_export_golden_rules": {}, "cleanup_after_build": True, "nsis_path": "",
     "ai_tools_api_mode_enabled": False, "ai_tools_include_linter": True,

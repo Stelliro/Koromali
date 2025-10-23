@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import (QMessageBox, QMenu, QWidget, QVBoxLayout, QHBoxLayo
 import qtawesome as qta
 
 # Import managers by class, not instance
+from app_core.config import GITHUB_REPO_URL
 from app_core.settings_manager import SettingsManager
 from app_core.theme_manager import ThemeManager
 from app_core.file_handler import FileHandler
@@ -932,7 +933,11 @@ class MainWindow(QMainWindow):
         if (ed := self.tab_widget.currentWidget()) and isinstance(ed, EditorWidget) and (fp := self.editor_tabs_data.get(ed, {}).get('filepath')): self.linter_manager.lint_file(fp)
 
     def _show_about_dialog(self): QMessageBox.about(self, "About", f"Koromali v{versioning.APP_VERSION}")
-    def _open_github_link(self): QDesktopServices.openUrl(QUrl("https://github.com/Stelliro/Koromali"))
+    def _open_github_link(self):
+        if not GITHUB_REPO_URL:
+            log.warning("GitHub repository URL is not configured; link unavailable.")
+            return
+        QDesktopServices.openUrl(QUrl(GITHUB_REPO_URL))
 
     def _auto_save_current_tab(self):
         if hasattr(ed := self.tab_widget.currentWidget(), 'get_text') and self._is_editor_modified(ed): self._action_save_file(editor_widget=ed)
