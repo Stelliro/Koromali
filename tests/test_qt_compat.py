@@ -110,3 +110,29 @@ def test_raises_error_when_no_binding_present(monkeypatch: pytest.MonkeyPatch) -
 
     with pytest.raises(ImportError, match="No supported Qt binding is installed"):
         module.ensure_qt_binding()
+
+
+def test_aliasing_skips_optional_modules_that_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Optional Qt modules that raise during import should not break aliasing."""
+
+    _clear_binding(monkeypatch, "PyQt6")
+    _clear_binding(monkeypatch, "PySide6")
+    _install_fake_binding(monkeypatch, "PyQt6", ("QtCore", "QtWidgets"))
+
+    original_import_module = importlib.import_module
+
+    def guarded_import(name: str, package: str | None = None):
+        if name == "PyQt6.QtWebEngineCore":
+            raise ImportError("libEGL missing")
+        root_name = name.split(".", 1)[0]
+        if root_name in {"PyQt6", "PySide6"} and name not in sys.modules:
+            raise ModuleNotFoundError(name)
+        return original_import_module(name, package)
+
+    monkeypatch.setattr(importlib, "import_module", guarded_import)
+
+    module = _reload_helpers()
+    binding = module.ensure_qt_binding()
+
+    assert binding == "PyQt6"
+    assert importlib.import_module("PySide6.QtWidgets") is sys.modules["PyQt6.QtWidgets"]

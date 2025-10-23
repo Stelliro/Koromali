@@ -72,6 +72,12 @@ def _alias_binding_modules(source_package: str, target_package: str) -> None:
             module = importlib.import_module(f"{source_package}.{submodule}")
         except ModuleNotFoundError:
             continue
+        except Exception:
+            # Some bindings lazily provide optional modules that may fail to import
+            # because native dependencies (such as QtWebEngine libraries) are
+            # unavailable. Skip those modules so that the common Qt packages remain
+            # available without crashing the alias setup.
+            continue
         sys.modules[f"{target_package}.{submodule}"] = module
         setattr(package, submodule, module)
 
