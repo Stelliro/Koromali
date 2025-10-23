@@ -2,6 +2,8 @@
 import json
 import os
 from typing import Any, Dict
+
+from app_core.config import GITHUB_PLUGINS_REPO
 from utils.logger import log, get_app_data_path
 
 APP_DATA_ROOT = get_app_data_path()
@@ -18,7 +20,7 @@ DEFAULT_SETTINGS = {
     "explorer_expanded_paths": [], "project_customizations": {},
     "explorer_show_hidden_files": False,
     "python_interpreter_path": "", "source_control_repos": [],
-    "active_update_repo_id": None, "plugins_distro_repo": "Stelliro/Koromali-plugins",
+    "active_update_repo_id": None, "plugins_distro_repo": GITHUB_PLUGINS_REPO or "",
     "commit_message_history": [], "max_commit_history": 50, "ai_export_loadouts": {},
     "ai_export_golden_rules": {}, "cleanup_after_build": True, "nsis_path": "",
     "ai_tools_api_mode_enabled": False, "ai_tools_include_linter": True,
@@ -36,6 +38,7 @@ class SettingsManager:
         self.settings = self._load_json_with_defaults(self.settings_file, DEFAULT_SETTINGS)
         self.credentials = self._load_json_with_defaults(self.credentials_file, DEFAULT_CREDENTIALS)
         self._migrate_old_credentials()
+        self._remove_deprecated_settings()
 
     def _load_json_with_defaults(self, filepath: str, defaults: Dict) -> Dict:
         try:
@@ -67,8 +70,19 @@ class SettingsManager:
         for key in credential_keys:
             if key in self.settings:
                 self.credentials[key] = self.settings.pop(key); migrated = True
-        if migrated: 
+        if migrated:
             log.info("Migrated credentials from main settings file to separate credentials.json.")
+            self.save()
+
+    def _remove_deprecated_settings(self):
+        deprecated_keys = ["run_in_background"]
+        removed = False
+        for key in deprecated_keys:
+            if key in self.settings:
+                self.settings.pop(key, None)
+                removed = True
+        if removed:
+            log.info("Removed deprecated startup settings from configuration file.")
             self.save()
 
     def get(self, key: str, default: Any = None) -> Any:

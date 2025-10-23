@@ -75,14 +75,14 @@ Koromali is a lightweight yet powerful Integrated Development Environment for Py
 ## 🚀 Getting Started
 
 ### Using the Installer (Windows)
-The easiest way to get started on Windows is to download the latest setup executable from the [**Releases**](https://github.com/Stelliro/Koromali/releases) page. The installer provides options for creating desktop and Start Menu shortcuts.
+The easiest way to get started on Windows is to download the latest setup executable from the [**Releases**](https://github.com/<your-org>/Koromali/releases) page. The installer provides options for creating desktop and Start Menu shortcuts.
 
 ### Running from Source
 To run the editor from the source code, you will need `Python 3` and `Git` installed on your system. The repository includes convenient scripts to automate the setup process.
 
 1.  **Clone the Repository:**
     ```bash
-    git clone https://github.com/Stelliro/Koromali.git
+    git clone https://github.com/<your-org>/Koromali.git
     cd Koromali
     ```
 
@@ -116,9 +116,9 @@ For detailed instructions on the Markdown syntax, open the Installer Builder fro
 ## 🔒 Security & Privacy
 
 **Important:** The editor stores your personal settings, including your GitHub access token and API keys, in your local application data directory.
-*   **Windows:** `%LOCALAPPDATA%\Stelliro\Koromali`
-*   **Linux:** `~/.local/share/Stelliro/Koromali`
-*   **macOS:** `~/Library/Application Support/Stelliro/Koromali`
+*   **Windows:** `%LOCALAPPDATA%\Koromali\Koromali`
+*   **Linux:** `~/.local/share/Koromali/Koromali`
+*   **macOS:** `~/Library/Application Support/Koromali/Koromali`
 
 These configuration files are specific to your machine and are **never** included in project-level operations like "Export for AI", version control, or installer builds.
 
@@ -133,7 +133,7 @@ Koromali can be extended with custom plugins.
 #### For Users
 You can install new plugins easily:
 1.  Navigate to `File > Preferences > Plugins`.
-2.  **From GitHub:** Enter a repository URL (like `Stelliro/Koromali-plugins`) and click "Fetch" to see a list of available plugins.
+2.  **From GitHub:** Enter a repository URL (like `<your-org>/Koromali-plugins`) and click "Fetch" to see a list of available plugins.
 3.  **From a File:** Click "Install from File..." to upload a `.zip` archive of a plugin.
 4.  After installation, a restart will be required to load the new plugin.
 

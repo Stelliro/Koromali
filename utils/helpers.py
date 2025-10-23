@@ -8,13 +8,6 @@ from typing import List, Optional
 from PyQt6.QtGui import QFontDatabase
 from .logger import log, get_app_data_path
 
-if sys.platform == "win32":
-    try:
-        import winshell
-    except ImportError:
-        winshell = None
-        log.warning("The 'winshell' package is not installed. Startup shortcut features will be disabled.")
-
 # Define constants at the module level for easy import
 LARGE_FILE_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB
 LARGE_TOKEN_COUNT = 1_000_000
@@ -166,20 +159,6 @@ def apply_patch(original_content: str, patch_content: str) -> str:
     
     # Re-join using the original detected line ending
     return original_ending.join(output_lines)
-
-
-def get_startup_shortcut_path() -> Optional[str]:
-    """
-    Gets the cross-platform path to the user's startup folder.
-    """
-    if sys.platform == "win32":
-        try:
-            startup_folder = winshell.folder("startup")
-            return os.path.join(startup_folder, "Koromali.lnk")
-        except Exception as e:
-            log.error(f"Could not get Windows startup folder path: {e}")
-            return None
-    return None
 
 
 def get_best_available_font(preferred_list: List[str]) -> Optional[str]:
