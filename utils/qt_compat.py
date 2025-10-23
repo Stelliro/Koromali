@@ -19,48 +19,62 @@ QT_SUBMODULES: tuple[str, ...] = (
 _BINDING_NAME: str | None = None
 
 
-def _install_alias_modules(source_package: str) -> None:
-    """Expose ``PyQt6`` style modules backed by *source_package*.
+def _ensure_package_stub(package_name: str) -> ModuleType:
+    """Return a lazily created package module for *package_name*."""
 
-    The function registers lightweight aliases inside :mod:`sys.modules` so that
-    ``from PyQt6.QtWidgets import QWidget`` keeps working even if the runtime
-    only ships with an alternative binding such as :mod:`PySide6`.
-    """
-
-    package = sys.modules.get("PyQt6")
+    package = sys.modules.get(package_name)
     if package is None:
-        package = ModuleType("PyQt6")
+        package = ModuleType(package_name)
         package.__path__ = []  # type: ignore[attr-defined]
-        sys.modules["PyQt6"] = package
+        sys.modules[package_name] = package
+    return package
+
+
+def _sync_signal_api(package_name: str) -> None:
+    """Normalise QtCore signal helpers for the aliased *package_name*."""
+
+    qtcore = sys.modules.get(f"{package_name}.QtCore")
+    if qtcore is None:
+        return
+
+    if package_name == "PyQt6":
+        if not hasattr(qtcore, "pyqtSignal") and hasattr(qtcore, "Signal"):
+            setattr(qtcore, "pyqtSignal", getattr(qtcore, "Signal"))
+        if not hasattr(qtcore, "pyqtSlot") and hasattr(qtcore, "Slot"):
+            setattr(qtcore, "pyqtSlot", getattr(qtcore, "Slot"))
+    elif package_name == "PySide6":
+        if not hasattr(qtcore, "Signal") and hasattr(qtcore, "pyqtSignal"):
+            setattr(qtcore, "Signal", getattr(qtcore, "pyqtSignal"))
+        if not hasattr(qtcore, "Slot") and hasattr(qtcore, "pyqtSlot"):
+            setattr(qtcore, "Slot", getattr(qtcore, "pyqtSlot"))
+
+
+def _alias_binding_modules(source_package: str, target_package: str) -> None:
+    """Expose *target_package* modules backed by *source_package*."""
+
+    try:
+        importlib.import_module(target_package)
+    except ModuleNotFoundError:
+        pass
+    else:
+        # A native implementation is available; do not overwrite it.
+        return
+
+    package = _ensure_package_stub(target_package)
 
     for submodule in QT_SUBMODULES:
-        module = importlib.import_module(f"{source_package}.{submodule}")
-        sys.modules[f"PyQt6.{submodule}"] = module
+        try:
+            module = importlib.import_module(f"{source_package}.{submodule}")
+        except ModuleNotFoundError:
+            continue
+        sys.modules[f"{target_package}.{submodule}"] = module
         setattr(package, submodule, module)
 
-    if source_package == "PySide6":
-        qtcore = sys.modules.get("PyQt6.QtCore")
-        if qtcore is not None:
-            # PySide6 exposes ``Signal``/``Slot`` while Koromali imports the
-            # PyQt6 equivalents. Mirror the expected attribute names.
-            if not hasattr(qtcore, "pyqtSignal") and hasattr(qtcore, "Signal"):
-                setattr(qtcore, "pyqtSignal", getattr(qtcore, "Signal"))
-            if not hasattr(qtcore, "pyqtSlot") and hasattr(qtcore, "Slot"):
-                setattr(qtcore, "pyqtSlot", getattr(qtcore, "Slot"))
+    _sync_signal_api(target_package)
 
 
 def ensure_qt_binding(preferred: Iterable[str] | None = None) -> str:
-    """Ensure that at least one supported Qt binding is importable.
-
-    The project imports :mod:`PyQt6` across the codebase, but some
-    environments (especially Windows distributions) may only provide
-    :mod:`PySide6`.  This function looks for a usable binding in
-    *preferred* order and, when necessary, installs shim modules so the
-    rest of the code continues to import from :mod:`PyQt6`.
-
-    Returns the resolved binding name.
-    Raises :class:`ImportError` if no supported binding is available.
-    """
+    """Ensure that at least one supported Qt binding is importable."""
 
     global _BINDING_NAME
     if _BINDING_NAME:
@@ -77,10 +91,11 @@ def ensure_qt_binding(preferred: Iterable[str] | None = None) -> str:
             continue
 
         if candidate == "PyQt6":
+            _alias_binding_modules("PyQt6", "PySide6")
             _BINDING_NAME = candidate
             return candidate
 
-        _install_alias_modules(candidate)
+        _alias_binding_modules(candidate, "PyQt6")
         _BINDING_NAME = candidate
         return candidate
 
