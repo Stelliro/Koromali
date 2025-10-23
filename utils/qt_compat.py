@@ -2,11 +2,7 @@
 from __future__ import annotations
 
 import importlib
-import importlib.abc
-import importlib.machinery
-import importlib.util
 import sys
-from types import ModuleType
 from typing import Iterable
 
 __all__ = [
@@ -32,7 +28,6 @@ QT_OPTIONAL_SUBMODULES: frozenset[str] = frozenset(
 )
 
 _BINDING_NAME: str | None = None
-_ALIAS_FINDERS: dict[tuple[str, str], "_BindingAliasFinder"] = {}
 
 
 def _sync_signal_api(package_name: str) -> None:
@@ -54,26 +49,21 @@ def _sync_signal_api(package_name: str) -> None:
             setattr(qtcore, "Slot", getattr(qtcore, "pyqtSlot"))
 
 
-def _alias_binding_modules(source_package: str, target_package: str) -> None:
-    """Expose *target_package* modules backed by *source_package*."""
+def _import_binding(binding: str) -> set[str]:
+    """Import *binding* and return the set of available submodules."""
 
-    try:
-        importlib.import_module(target_package)
-    except ModuleNotFoundError:
-        target_available = False
-    else:
-        target_available = True
+    importlib.import_module(binding)
 
     available_submodules: set[str] = set()
     for submodule in QT_SUBMODULES:
-        full_name = f"{source_package}.{submodule}"
+        full_name = f"{binding}.{submodule}"
         try:
-            module = importlib.import_module(full_name)
+            importlib.import_module(full_name)
         except ModuleNotFoundError as exc:
             if submodule in QT_OPTIONAL_SUBMODULES:
                 continue
             raise ImportError(
-                f"Missing required Qt module {source_package}.{submodule}"
+                f"Missing required Qt module {full_name}"
             ) from exc
         except Exception as exc:
             if submodule in QT_OPTIONAL_SUBMODULES:
@@ -83,88 +73,30 @@ def _alias_binding_modules(source_package: str, target_package: str) -> None:
             ) from exc
         else:
             available_submodules.add(submodule)
-            sys.modules.setdefault(full_name, module)
 
-    if not target_available:
-        _install_alias_finder(source_package, target_package, available_submodules)
-
-    _sync_signal_api(source_package)
-
-    _sync_signal_api(target_package)
+    return available_submodules
 
 
-class _BindingAliasFinder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
-    """Meta path finder/loader that aliases *target_root* to *source_root*."""
-
-    def __init__(
-        self,
-        source_root: str,
-        target_root: str,
-        submodules: frozenset[str],
-    ) -> None:
-        self._source_root = source_root
-        self._target_root = target_root
-        self._submodules = submodules
-
-    def find_spec(
-        self,
-        fullname: str,
-        path: Iterable[str] | None,
-        target: ModuleType | None = None,
-    ) -> importlib.machinery.ModuleSpec | None:
-        if fullname == self._target_root:
-            mapped = self._source_root
-        elif fullname.startswith(f"{self._target_root}."):
-            suffix = fullname[len(self._target_root) + 1 :]
-            if suffix.split(".", 1)[0] not in self._submodules:
-                return None
-            mapped = f"{self._source_root}.{suffix}"
-        else:
-            return None
-
-        spec = importlib.util.find_spec(mapped)
-        if spec is None:
-            return None
-
-        is_package = spec.submodule_search_locations is not None
-        return importlib.machinery.ModuleSpec(
-            fullname,
-            self,
-            origin=spec.origin,
-            is_package=is_package,
-        )
-
-    def create_module(self, spec: importlib.machinery.ModuleSpec) -> ModuleType | None:
-        return None  # Use default module creation semantics
-
-    def exec_module(self, module: ModuleType) -> None:
-        suffix = module.__name__[len(self._target_root) :]
-        mapped = f"{self._source_root}{suffix}"
-        actual = importlib.import_module(mapped)
-
-        sys.modules[module.__name__] = actual
-
-        parent_name, _, attr_name = module.__name__.rpartition(".")
-        if parent_name:
-            parent = sys.modules.get(parent_name)
-            if parent is not None:
-                setattr(parent, attr_name, actual)
-
-        _sync_signal_api(self._target_root)
-
-
-def _install_alias_finder(
-    source_root: str, target_root: str, submodules: set[str]
+def _alias_binding_modules(
+    source_package: str, target_package: str, available_submodules: set[str]
 ) -> None:
-    """Install a meta path finder to alias *target_root* to *source_root*."""
+    """Expose *target_package* modules backed by *source_package*."""
 
-    key = (source_root, target_root)
-    if key in _ALIAS_FINDERS:
+    if target_package in sys.modules:
         return
 
-    finder = _BindingAliasFinder(source_root, target_root, frozenset(submodules))
-    sys.meta_path.insert(0, finder)
-    _ALIAS_FINDERS[key] = finder
+    source_module = sys.modules[source_package]
+    sys.modules[target_package] = source_module
+
+    for submodule in available_submodules:
+        source_name = f"{source_package}.{submodule}"
+        target_name = f"{target_package}.{submodule}"
+        module = sys.modules.get(source_name)
+        if module is not None:
+            sys.modules[target_name] = module
+
+    _sync_signal_api(source_package)
+    _sync_signal_api(target_package)
 
 
 def ensure_qt_binding(preferred: Iterable[str] | None = None) -> str:
@@ -179,17 +111,15 @@ def ensure_qt_binding(preferred: Iterable[str] | None = None) -> str:
     last_error: Exception | None = None
     for candidate in search_order:
         try:
-            importlib.import_module(candidate)
+            available = _import_binding(candidate)
         except Exception as exc:  # pragma: no cover - pass error to next candidate
             last_error = exc
             continue
 
+        other = "PySide6" if candidate == "PyQt6" else "PyQt6"
         try:
-            if candidate == "PyQt6":
-                _alias_binding_modules("PyQt6", "PySide6")
-            else:
-                _alias_binding_modules(candidate, "PyQt6")
-        except ImportError as exc:
+            _alias_binding_modules(candidate, other, available)
+        except Exception as exc:  # pragma: no cover - aliasing errors are fatal
             last_error = exc
             continue
 
