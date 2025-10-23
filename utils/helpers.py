@@ -8,13 +8,6 @@ from typing import List, Optional
 from PyQt6.QtGui import QFontDatabase
 from .logger import log, get_app_data_path
 
-if sys.platform == "win32":
-    try:
-        import winshell
-    except ImportError:
-        winshell = None
-        log.warning("The 'winshell' package is not installed. Startup shortcut features will be disabled.")
-
 # Define constants at the module level for easy import
 LARGE_FILE_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB
 LARGE_TOKEN_COUNT = 1_000_000
@@ -22,9 +15,7 @@ SELECTION_TOKEN_THRESHOLD = 2_000_000
 
 
 def get_base_path():
-    """
-    Returns the application's base path for resource loading.
-    """
+    """Return the application's base path for resource loading."""
     if getattr(sys, 'frozen', False):
         return os.path.dirname(sys.executable)
     else:
@@ -32,29 +23,27 @@ def get_base_path():
 
 
 def get_projects_path() -> str:
-    """Returns the path to the internal projects directory, ensuring it exists."""
+    """Return the path to the internal projects directory, ensuring it exists."""
     projects_dir = os.path.join(get_app_data_path(), "projects")
     os.makedirs(projects_dir, exist_ok=True)
     return projects_dir
 
 
 def get_session_path() -> str:
-    """Returns the path to the session data directory, creating it if needed."""
+    """Return the path to the session data directory, creating it if needed."""
     session_dir = os.path.join(get_app_data_path(), "session_data", "drafts")
     os.makedirs(session_dir, exist_ok=True)
     return session_dir
 
 
 def get_draft_path(original_filepath: str) -> str:
-    """Generates a consistent, safe filename for a draft file."""
+    """Generate a consistent, safe filename for a draft file."""
     path_hash = hashlib.sha256(original_filepath.encode('utf-8')).hexdigest()
     return os.path.join(get_session_path(), f"{path_hash}.draft")
 
 
 def clean_git_conflict_markers(content: str) -> str:
-    """
-    Removes Git conflict markers from a string, keeping the 'HEAD' version.
-    """
+    """Remove Git conflict markers from *content*, keeping the ``HEAD`` block."""
     if '<<<<<<<' not in content:
         return content
 
@@ -87,7 +76,7 @@ def clean_git_conflict_markers(content: str) -> str:
 
 
 def generate_unified_diff(original_content: str, new_content: str, fromfile='original', tofile='new') -> str:
-    """Generates a git-style unified diff string."""
+    """Generate a git-style unified diff string."""
     original_lines = original_content.splitlines(keepends=True)
     new_lines = new_content.splitlines(keepends=True)
     diff = difflib.unified_diff(original_lines, new_lines, fromfile=fromfile, tofile=tofile)
@@ -95,11 +84,7 @@ def generate_unified_diff(original_content: str, new_content: str, fromfile='ori
 
 
 def apply_patch(original_content: str, patch_content: str) -> str:
-    """
-    Applies a unified diff patch to a string content, resilient to
-    line ending differences.
-    Raises ValueError if the patch cannot be applied cleanly.
-    """
+    """Apply a unified diff patch to *original_content* and return the result."""
     # Normalize line endings of both original and patch to LF for processing
     original_lines = original_content.replace('\r\n', '\n').splitlines()
     patch_lines = patch_content.replace('\r\n', '\n').splitlines()
@@ -168,24 +153,8 @@ def apply_patch(original_content: str, patch_content: str) -> str:
     return original_ending.join(output_lines)
 
 
-def get_startup_shortcut_path() -> Optional[str]:
-    """
-    Gets the cross-platform path to the user's startup folder.
-    """
-    if sys.platform == "win32":
-        try:
-            startup_folder = winshell.folder("startup")
-            return os.path.join(startup_folder, "Koromali.lnk")
-        except Exception as e:
-            log.error(f"Could not get Windows startup folder path: {e}")
-            return None
-    return None
-
-
 def get_best_available_font(preferred_list: List[str]) -> Optional[str]:
-    """
-    Scans a preferred list of font families and returns the first one found.
-    """
+    """Scan *preferred_list* and return the first installed font family."""
     if not isinstance(preferred_list, list):
         log.warning(f"Font list provided is not a list: {preferred_list}. No font selected.")
         return None
@@ -202,10 +171,7 @@ def get_best_available_font(preferred_list: List[str]) -> Optional[str]:
     return None
 
 def is_binary_file(filepath: str) -> bool:
-    """
-    Checks if a file is likely binary based on its extension and, if needed,
-    by reading a chunk to check for null bytes.
-    """
+    """Return ``True`` when *filepath* looks like a binary file."""
     text_extensions = {'.txt', '.py', '.md', '.json', '.html', '.css', '.js', '.xml', '.yml', '.yaml', '.toml', '.ini', '.cfg', '.h', '.hpp', '.c', '.cpp', '.cs', '.java', '.rs', '.go', '.qss', '.sh', '.bat', '.spec'}
     binary_extensions = {'.exe', '.dll', '.so', '.o', '.a', '.lib', '.dylib', '.app', '.msi', '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.svg', '.zip', '.rar', '.7z', '.gz', '.tar', '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.mp3', '.wav', '.mp4', '.mkv', '.avi', '.mov', '.eot', '.woff', '.woff2', '.ttf', '.otf', '.db', '.sqlite3', '.dat'}
 
