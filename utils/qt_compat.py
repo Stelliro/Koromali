@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import importlib
+import importlib.abc
+import importlib.machinery
 import importlib.util
 import sys
 from types import ModuleType
@@ -30,21 +32,7 @@ QT_OPTIONAL_SUBMODULES: frozenset[str] = frozenset(
 )
 
 _BINDING_NAME: str | None = None
-
-
-def _ensure_package_stub(package_name: str) -> ModuleType:
-    """Return a lazily created package module for *package_name*."""
-
-    package = sys.modules.get(package_name)
-    if package is None:
-        package = ModuleType(package_name)
-        package.__dict__.setdefault("__path__", [])
-        package.__package__ = package_name
-        package.__spec__ = importlib.util.spec_from_loader(
-            package_name, loader=None, is_package=True
-        )
-        sys.modules[package_name] = package
-    return package
+_ALIAS_FINDERS: dict[tuple[str, str], "_BindingAliasFinder"] = {}
 
 
 def _sync_signal_api(package_name: str) -> None:
@@ -76,11 +64,11 @@ def _alias_binding_modules(source_package: str, target_package: str) -> None:
     else:
         target_available = True
 
-    package = _ensure_package_stub(target_package)
-
+    available_submodules: set[str] = set()
     for submodule in QT_SUBMODULES:
+        full_name = f"{source_package}.{submodule}"
         try:
-            module = importlib.import_module(f"{source_package}.{submodule}")
+            module = importlib.import_module(full_name)
         except ModuleNotFoundError as exc:
             if submodule in QT_OPTIONAL_SUBMODULES:
                 continue
@@ -89,21 +77,94 @@ def _alias_binding_modules(source_package: str, target_package: str) -> None:
             ) from exc
         except Exception as exc:
             if submodule in QT_OPTIONAL_SUBMODULES:
-                # Some bindings lazily provide optional modules that may fail to
-                # import because native dependencies (such as QtWebEngine) are
-                # unavailable. Skip those modules so that the common Qt packages
-                # remain available without crashing the alias setup.
                 continue
-
             raise ImportError(
-                f"Failed to import required Qt module "
-                f"{source_package}.{submodule}"
+                f"Failed to import required Qt module {full_name}"
             ) from exc
-        if not target_available:
-            sys.modules[f"{target_package}.{submodule}"] = module
-            setattr(package, submodule, module)
+        else:
+            available_submodules.add(submodule)
+            sys.modules.setdefault(full_name, module)
+
+    if not target_available:
+        _install_alias_finder(source_package, target_package, available_submodules)
+
+    _sync_signal_api(source_package)
 
     _sync_signal_api(target_package)
+
+
+class _BindingAliasFinder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
+    """Meta path finder/loader that aliases *target_root* to *source_root*."""
+
+    def __init__(
+        self,
+        source_root: str,
+        target_root: str,
+        submodules: frozenset[str],
+    ) -> None:
+        self._source_root = source_root
+        self._target_root = target_root
+        self._submodules = submodules
+
+    def find_spec(
+        self,
+        fullname: str,
+        path: Iterable[str] | None,
+        target: ModuleType | None = None,
+    ) -> importlib.machinery.ModuleSpec | None:
+        if fullname == self._target_root:
+            mapped = self._source_root
+        elif fullname.startswith(f"{self._target_root}."):
+            suffix = fullname[len(self._target_root) + 1 :]
+            if suffix.split(".", 1)[0] not in self._submodules:
+                return None
+            mapped = f"{self._source_root}.{suffix}"
+        else:
+            return None
+
+        spec = importlib.util.find_spec(mapped)
+        if spec is None:
+            return None
+
+        is_package = spec.submodule_search_locations is not None
+        return importlib.machinery.ModuleSpec(
+            fullname,
+            self,
+            origin=spec.origin,
+            is_package=is_package,
+        )
+
+    def create_module(self, spec: importlib.machinery.ModuleSpec) -> ModuleType | None:
+        return None  # Use default module creation semantics
+
+    def exec_module(self, module: ModuleType) -> None:
+        suffix = module.__name__[len(self._target_root) :]
+        mapped = f"{self._source_root}{suffix}"
+        actual = importlib.import_module(mapped)
+
+        sys.modules[module.__name__] = actual
+
+        parent_name, _, attr_name = module.__name__.rpartition(".")
+        if parent_name:
+            parent = sys.modules.get(parent_name)
+            if parent is not None:
+                setattr(parent, attr_name, actual)
+
+        _sync_signal_api(self._target_root)
+
+
+def _install_alias_finder(
+    source_root: str, target_root: str, submodules: set[str]
+) -> None:
+    """Install a meta path finder to alias *target_root* to *source_root*."""
+
+    key = (source_root, target_root)
+    if key in _ALIAS_FINDERS:
+        return
+
+    finder = _BindingAliasFinder(source_root, target_root, frozenset(submodules))
+    sys.meta_path.insert(0, finder)
+    _ALIAS_FINDERS[key] = finder
 
 
 def ensure_qt_binding(preferred: Iterable[str] | None = None) -> str:
