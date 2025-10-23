@@ -15,18 +15,10 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QTabWidget,
 from PyQt6.QtGui import QFont, QDesktopServices, QColor
 from PyQt6.QtCore import Qt, QSize, pyqtSignal, QUrl
 
-from app_core.config import APP_NAME
+from app_core.config import APP_NAME, GITHUB_PLUGINS_REPO
 from utils.logger import log
 
-if sys.platform == "win32":
-    try:
-        import winshell
-    except ImportError:
-        winshell = None
-        log.warning("The 'winshell' package is not installed. Startup shortcut features will be disabled.")
-
 import qtawesome as qta
-from utils.helpers import get_startup_shortcut_path
 from app_core.plugin_manager import Plugin
 
 if TYPE_CHECKING:
@@ -159,13 +151,12 @@ class PreferencesDialog(QDialog):
         if sys.platform == "win32":
             self.nsis_path_edit.setText(self.settings.get("nsis_path", ""))
             self.cleanup_build_checkbox.setChecked(self.settings.get("cleanup_after_build", True))
-            if winshell and hasattr(self, 'run_in_background_checkbox'): self.run_in_background_checkbox.setChecked(
-                self.settings.get("run_in_background", False))
 
         self.staged_repos = [r.copy() for r in self.settings.get("source_control_repos", [])]
         self.staged_active_repo_id = self.settings.get("active_update_repo_id")
         self._populate_repo_list()
-        self.plugins_repo_edit.setText(self.settings.get("plugins_distro_repo", "Stelliro/Koromali-plugins"))
+        default_repo = GITHUB_PLUGINS_REPO or ""
+        self.plugins_repo_edit.setText(self.settings.get("plugins_distro_repo", default_repo))
 
     def _connect_ui_changed_signals(self):
         for w in self.findChildren((QComboBox, QSpinBox, QCheckBox, QFontComboBox, QLineEdit)):
@@ -209,10 +200,6 @@ class PreferencesDialog(QDialog):
         if sys.platform == "win32":
             ss["nsis_path"] = self.nsis_path_edit.text().strip()
             ss["cleanup_after_build"] = self.cleanup_build_checkbox.isChecked()
-            if winshell and hasattr(self, 'run_in_background_checkbox'):
-                ss["run_in_background"] = self.run_in_background_checkbox.isChecked()
-                if ss["run_in_background"] != self.original_settings.get("run_in_background", False):
-                    self._manage_startup_shortcut(ss["run_in_background"])
 
         nn, ne = self.git_user_name_edit.text().strip(), self.git_user_email_edit.text().strip()
         if nn != self.original_git_config.get('name') or ne != self.original_git_config.get('email'):
@@ -369,40 +356,10 @@ class PreferencesDialog(QDialog):
         layout = QVBoxLayout(tab)
         layout.setSpacing(15)
         startup_group = self._create_layout_in_groupbox("System Startup", layout)
-        if sys.platform == "win32" and winshell:
-            self.run_in_background_checkbox = QCheckBox(
-                f"Launch {APP_NAME} on system startup (runs in system tray)")
-            self.run_in_background_checkbox.setToolTip(
-                "Creates a shortcut in the Windows Startup folder.")
-            startup_group.addRow(
-                self.run_in_background_checkbox)
-        else:
-            startup_group.addRow(QLabel("Startup options are only available on Windows."))
+        startup_group.addRow(QLabel(
+            "Manage whether Koromali launches at login through your operating system's startup settings."))
         layout.addStretch()
         self.tab_widget.addTab(tab, qta.icon('fa5s.desktop'), "System")
-
-    def _manage_startup_shortcut(self, create: bool):
-        if not winshell: return
-        shortcut_path = get_startup_shortcut_path()
-        if not shortcut_path: return
-        try:
-            if create and not os.path.exists(shortcut_path):
-                tray_exe_name = f"{APP_NAME}Tray.exe"
-                tray_exe_path = os.path.join(os.path.dirname(sys.executable), tray_exe_name)
-                if not os.path.exists(tray_exe_path):
-                    dev_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', tray_exe_name))
-                    if os.path.exists(dev_path):
-                        tray_exe_path = dev_path
-                    else:
-                        raise FileNotFoundError(f"{tray_exe_name} not found.")
-                
-                winshell.CreateShortcut(Path=shortcut_path, Target=tray_exe_path)
-                log.info(f"Created startup shortcut for '{tray_exe_path}'.")
-            elif not create and os.path.exists(shortcut_path):
-                os.remove(shortcut_path)
-                log.info("Removed startup shortcut.")
-        except Exception as e:
-            QMessageBox.critical(self, "Shortcut Error", f"Could not manage startup shortcut:\n{e}")
 
     def _create_source_control_tab(self):
         tab = QWidget()

@@ -8,7 +8,7 @@ from pathlib import Path
 
 # --- Configuration ---
 APP_NAME = "Koromali"
-ORG_NAME = "Stelliro"
+ORG_NAME = os.environ.get("KOROMALI_ORG_NAME", "Koromali")
 MAIN_EXE = f"{APP_NAME}.exe"
 TRAY_EXE = f"{APP_NAME}Tray.exe"
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent

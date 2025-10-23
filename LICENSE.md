@@ -11,7 +11,7 @@ The licensor cannot revoke these freedoms as long as you follow the license term
 
 **Under the following terms:**
 
-*   **Attribution (BY)** — You must give appropriate credit. A good way to do this is by mentioning "stelliro" as the original envisioner and crediting the development team, including **Google Gemini** for AI-assisted code generation and **[ENVIXITY-8-5-3](https://github.com/ENVIXITY-8-5-3)** for their contributions. Please also provide a link to the license and indicate if changes were made. You may do so in any reasonable manner, but not in any way that suggests the licensor endorses you or your use.
+*   **Attribution (BY)** — You must give appropriate credit to the Koromali project maintainers and contributors. Please provide a link to the license and indicate if changes were made. You may do so in any reasonable manner, but not in any way that suggests the licensor endorses you or your use.
 *   **NonCommercial (NC)** — **You may not use the material for commercial purposes.** This means you are not permitted to use this code, or any derivative works based on this code, for direct or indirect financial gain. This includes, but is not limited to:
     *   Selling the software or access to it.
     *   Using the software as part of a paid service or product.

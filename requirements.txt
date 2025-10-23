@@ -34,7 +34,3 @@ PyQt6-WebEngine
 
 # For the Corvus TUI (optional developer dependency)
 textual
-
-# For creating Windows startup shortcuts (Windows-only, optional)
-# Install with: pip install winshell
-# winshell

@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QTextEdit, QLabel,
                              QDialogButtonBox, QApplication)
 from PyQt6.QtGui import QFont, QDesktopServices
 from PyQt6.QtCore import QUrl
+from app_core.config import GITHUB_ISSUES_URL
 from utils.versioning import APP_VERSION
 from utils.logger import log
 
@@ -100,10 +101,12 @@ Steps to reproduce the behavior:
 
         issue_body = quote_plus(issue_body_template.strip())
 
-        url = QUrl(
-            f"https://github.com/Stelliro/Koromali/issues/new?title="
-            f"{issue_title}&body={issue_body}"
-        )
+        if not GITHUB_ISSUES_URL:
+            log.warning("GitHub issues URL is not configured; cannot open report link.")
+            return
+
+        separator = '&' if '?' in GITHUB_ISSUES_URL else '?'
+        url = QUrl(f"{GITHUB_ISSUES_URL}{separator}title={issue_title}&body={issue_body}")
         QDesktopServices.openUrl(url)
 
     def _force_quit_app(self):
