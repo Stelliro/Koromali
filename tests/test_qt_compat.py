@@ -47,6 +47,19 @@ def _install_fake_binding(
     return module
 
 
+def _install_fake_root(monkeypatch: pytest.MonkeyPatch, package: str) -> ModuleType:
+    """Install a bare package module without any submodules."""
+
+    module = ModuleType(package)
+    module.__package__ = package
+    module.__path__ = []  # type: ignore[attr-defined]
+    module.__spec__ = importlib.machinery.ModuleSpec(
+        package, loader=None, is_package=True
+    )
+    monkeypatch.setitem(sys.modules, package, module)
+    return module
+
+
 def _patch_qt_imports(monkeypatch: pytest.MonkeyPatch) -> None:
     """Intercept Qt binding imports so tests control availability."""
 
@@ -72,7 +85,7 @@ def test_aliases_pyside6_modules_when_only_pyqt6_present(monkeypatch: pytest.Mon
 
     _clear_binding(monkeypatch, "PyQt6")
     _clear_binding(monkeypatch, "PySide6")
-    _install_fake_binding(monkeypatch, "PyQt6", ("QtCore", "QtWidgets"))
+    _install_fake_binding(monkeypatch, "PyQt6", ("QtCore", "QtGui", "QtWidgets"))
     _patch_qt_imports(monkeypatch)
 
     module = _reload_helpers()
@@ -88,7 +101,7 @@ def test_aliases_pyqt6_modules_when_only_pyside6_present(monkeypatch: pytest.Mon
 
     _clear_binding(monkeypatch, "PyQt6")
     _clear_binding(monkeypatch, "PySide6")
-    _install_fake_binding(monkeypatch, "PySide6", ("QtCore", "QtWidgets"))
+    _install_fake_binding(monkeypatch, "PySide6", ("QtCore", "QtGui", "QtWidgets"))
     _patch_qt_imports(monkeypatch)
 
     module = _reload_helpers()
@@ -117,7 +130,7 @@ def test_aliasing_skips_optional_modules_that_error(monkeypatch: pytest.MonkeyPa
 
     _clear_binding(monkeypatch, "PyQt6")
     _clear_binding(monkeypatch, "PySide6")
-    _install_fake_binding(monkeypatch, "PyQt6", ("QtCore", "QtWidgets"))
+    _install_fake_binding(monkeypatch, "PyQt6", ("QtCore", "QtGui", "QtWidgets"))
 
     original_import_module = importlib.import_module
 
@@ -136,3 +149,65 @@ def test_aliasing_skips_optional_modules_that_error(monkeypatch: pytest.MonkeyPa
 
     assert binding == "PyQt6"
     assert importlib.import_module("PySide6.QtWidgets") is sys.modules["PyQt6.QtWidgets"]
+
+
+def test_falls_back_when_required_module_import_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    """If a binding fails to provide required modules, the next option is tried."""
+
+    _clear_binding(monkeypatch, "PyQt6")
+    _clear_binding(monkeypatch, "PySide6")
+
+    _install_fake_root(monkeypatch, "PyQt6")
+    _install_fake_binding(monkeypatch, "PySide6", ("QtCore", "QtGui", "QtWidgets"))
+
+    original_import_module = importlib.import_module
+
+    def guarded_import(name: str, package: str | None = None):
+        if name in sys.modules:
+            return sys.modules[name]
+        if name == "PyQt6":
+            return sys.modules[name]
+        if name == "PyQt6.QtWidgets":
+            raise ImportError("libGL missing")
+        root_name = name.split(".", 1)[0]
+        if root_name in {"PyQt6", "PySide6"} and name not in sys.modules:
+            raise ModuleNotFoundError(name)
+        return original_import_module(name, package)
+
+    monkeypatch.setattr(importlib, "import_module", guarded_import)
+
+    module = _reload_helpers()
+    binding = module.ensure_qt_binding()
+
+    assert binding == "PySide6"
+
+
+def test_raises_error_when_required_modules_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A binding that lacks required modules should not be selected."""
+
+    _clear_binding(monkeypatch, "PyQt6")
+    _clear_binding(monkeypatch, "PySide6")
+
+    _install_fake_root(monkeypatch, "PyQt6")
+    _patch_qt_imports(monkeypatch)
+
+    original_import_module = importlib.import_module
+
+    def failing_import(name: str, package: str | None = None):
+        if name in sys.modules:
+            return sys.modules[name]
+        if name == "PyQt6":
+            return sys.modules[name]
+        if name == "PyQt6.QtWidgets":
+            raise ImportError("libGL missing")
+        root_name = name.split(".", 1)[0]
+        if root_name in {"PyQt6", "PySide6"} and name not in sys.modules:
+            raise ModuleNotFoundError(name)
+        return original_import_module(name, package)
+
+    monkeypatch.setattr(importlib, "import_module", failing_import)
+
+    module = _reload_helpers()
+
+    with pytest.raises(ImportError, match="No supported Qt binding is installed"):
+        module.ensure_qt_binding()

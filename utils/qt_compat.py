@@ -7,7 +7,12 @@ import sys
 from types import ModuleType
 from typing import Iterable
 
-__all__ = ["ensure_qt_binding", "get_available_binding", "QT_SUBMODULES"]
+__all__ = [
+    "ensure_qt_binding",
+    "get_available_binding",
+    "QT_OPTIONAL_SUBMODULES",
+    "QT_SUBMODULES",
+]
 
 QT_SUBMODULES: tuple[str, ...] = (
     "QtCore",
@@ -15,6 +20,13 @@ QT_SUBMODULES: tuple[str, ...] = (
     "QtWidgets",
     "QtWebEngineCore",
     "QtWebEngineWidgets",
+)
+
+QT_OPTIONAL_SUBMODULES: frozenset[str] = frozenset(
+    {
+        "QtWebEngineCore",
+        "QtWebEngineWidgets",
+    }
 )
 
 _BINDING_NAME: str | None = None
@@ -60,26 +72,36 @@ def _alias_binding_modules(source_package: str, target_package: str) -> None:
     try:
         importlib.import_module(target_package)
     except ModuleNotFoundError:
-        pass
+        target_available = False
     else:
-        # A native implementation is available; do not overwrite it.
-        return
+        target_available = True
 
     package = _ensure_package_stub(target_package)
 
     for submodule in QT_SUBMODULES:
         try:
             module = importlib.import_module(f"{source_package}.{submodule}")
-        except ModuleNotFoundError:
-            continue
-        except Exception:
-            # Some bindings lazily provide optional modules that may fail to import
-            # because native dependencies (such as QtWebEngine libraries) are
-            # unavailable. Skip those modules so that the common Qt packages remain
-            # available without crashing the alias setup.
-            continue
-        sys.modules[f"{target_package}.{submodule}"] = module
-        setattr(package, submodule, module)
+        except ModuleNotFoundError as exc:
+            if submodule in QT_OPTIONAL_SUBMODULES:
+                continue
+            raise ImportError(
+                f"Missing required Qt module {source_package}.{submodule}"
+            ) from exc
+        except Exception as exc:
+            if submodule in QT_OPTIONAL_SUBMODULES:
+                # Some bindings lazily provide optional modules that may fail to
+                # import because native dependencies (such as QtWebEngine) are
+                # unavailable. Skip those modules so that the common Qt packages
+                # remain available without crashing the alias setup.
+                continue
+
+            raise ImportError(
+                f"Failed to import required Qt module "
+                f"{source_package}.{submodule}"
+            ) from exc
+        if not target_available:
+            sys.modules[f"{target_package}.{submodule}"] = module
+            setattr(package, submodule, module)
 
     _sync_signal_api(target_package)
 
@@ -101,12 +123,15 @@ def ensure_qt_binding(preferred: Iterable[str] | None = None) -> str:
             last_error = exc
             continue
 
-        if candidate == "PyQt6":
-            _alias_binding_modules("PyQt6", "PySide6")
-            _BINDING_NAME = candidate
-            return candidate
+        try:
+            if candidate == "PyQt6":
+                _alias_binding_modules("PyQt6", "PySide6")
+            else:
+                _alias_binding_modules(candidate, "PyQt6")
+        except ImportError as exc:
+            last_error = exc
+            continue
 
-        _alias_binding_modules(candidate, "PyQt6")
         _BINDING_NAME = candidate
         return candidate
 
