@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import importlib
+import importlib.util
 import sys
 from types import ModuleType
 from typing import Iterable
@@ -25,7 +26,11 @@ def _ensure_package_stub(package_name: str) -> ModuleType:
     package = sys.modules.get(package_name)
     if package is None:
         package = ModuleType(package_name)
-        package.__path__ = []  # type: ignore[attr-defined]
+        package.__dict__.setdefault("__path__", [])
+        package.__package__ = package_name
+        package.__spec__ = importlib.util.spec_from_loader(
+            package_name, loader=None, is_package=True
+        )
         sys.modules[package_name] = package
     return package
 
