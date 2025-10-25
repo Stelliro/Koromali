@@ -6,6 +6,7 @@ import json
 import difflib
 import re
 from dataclasses import dataclass
+from functools import partial
 from typing import Dict, List, Optional, Tuple, Iterator, TYPE_CHECKING
 
 from PyQt6.QtCore import (
@@ -62,6 +63,16 @@ from .diff_preview_dialog import DiffPreviewDialog
 
 EXCLUDE_DIRS = {'.git', '__pycache__', 'venv', '.venv', 'ai_exports', 'node_modules', 'dist', 'build'}
 
+NON_MARKDOWN_EXTENSIONS: set[str] = {
+    '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.tif', '.tiff', '.svg',
+    '.webp', '.psd', '.ai',
+    '.mp4', '.mov', '.avi', '.mkv', '.webm', '.wmv', '.flv', '.mpg', '.mpeg', '.m4v',
+    '.mp3', '.wav', '.flac', '.ogg', '.m4a', '.aac', '.aiff', '.wma',
+    '.zip', '.rar', '.7z', '.tar', '.gz', '.tgz', '.bz2', '.xz', '.lz', '.lz4', '.zst',
+    '.iso', '.dmg',
+    '.pdf', '.ps', '.eps', '.doc', '.docx', '.ppt', '.pptx', '.xls', '.xlsx', '.odt', '.ods', '.odp'
+}
+
 TRISTATE_FLAG = getattr(
     Qt.ItemFlag,
     "ItemIsTristate",
@@ -113,45 +124,250 @@ class CheckableFileSystemModel(QFileSystemModel):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.blocked_extensions: set[str] = set(NON_MARKDOWN_EXTENSIONS)
+        self._project_root: Optional[str] = None
         self._check_states: Dict[str, Qt.CheckState] = {}
         self._checked_files: set[str] = set()
+        self._token_counts: Dict[str, int] = {}
+        self._size_cache: Dict[str, int] = {}
+        self._partial_tokens: set[str] = set()
+        self._partial_sizes: set[str] = set()
         self.directoryLoaded.connect(self._on_directory_loaded)
 
+    # ------------------------------------------------------------------
+    # metadata helpers
+    def set_project_root(self, project_root: Optional[str]) -> None:
+        self._project_root = os.path.abspath(project_root) if project_root else None
+        self.reset_metadata()
+
+    def reset_metadata(self) -> None:
+        self._token_counts.clear()
+        self._size_cache.clear()
+        self._partial_tokens.clear()
+        self._partial_sizes.clear()
+
+    def apply_metadata(self, metadata: Dict[str, Dict[str, int]]) -> None:
+        if not metadata:
+            return
+
+        changed_indexes: set[QModelIndex] = set()
+        for path, payload in metadata.items():
+            abs_path = os.path.abspath(path)
+            size = payload.get("size")
+            tokens = payload.get("tokens")
+            changed_indexes.update(
+                self._store_metadata(abs_path, size=size, tokens=tokens)
+            )
+
+        for index in changed_indexes:
+            self._emit_index_changed(index)
+
+    def get_cached_size(self, path: str) -> Optional[int]:
+        return self._size_cache.get(os.path.abspath(path))
+
+    def get_cached_tokens(self, path: str) -> Optional[int]:
+        return self._token_counts.get(os.path.abspath(path))
+
+    def _store_metadata(
+        self,
+        path: str,
+        *,
+        size: Optional[int] = None,
+        tokens: Optional[int] = None,
+    ) -> set[QModelIndex]:
+        changed: set[QModelIndex] = set()
+        index = self.index(path)
+        if size is not None:
+            self._size_cache[path] = int(size)
+            self._partial_sizes.discard(path)
+            if index.isValid():
+                changed.add(index)
+        if tokens is not None:
+            self._token_counts[path] = int(tokens)
+            self._partial_tokens.discard(path)
+            if index.isValid():
+                changed.add(index)
+
+        changed.update(self._propagate_metadata_to_parents(path))
+        return changed
+
+    def _propagate_metadata_to_parents(self, path: str) -> set[QModelIndex]:
+        changed: set[QModelIndex] = set()
+        parent_path = os.path.dirname(path)
+        root = self._project_root
+
+        while parent_path:
+            if root and os.path.commonpath([root, parent_path]) != root:
+                break
+            parent_index = self.index(parent_path)
+            if not parent_index.isValid():
+                break
+            self._recalculate_directory_totals(parent_path)
+            changed.add(parent_index)
+            parent_path = os.path.dirname(parent_path)
+        return changed
+
+    def _recalculate_directory_totals(self, directory: str) -> None:
+        total_size = 0
+        total_tokens = 0
+        size_partial = False
+        token_partial = False
+
+        try:
+            with os.scandir(directory) as it:
+                entries = [entry for entry in it if entry.name not in EXCLUDE_DIRS]
+        except OSError:
+            self._size_cache.pop(directory, None)
+            self._token_counts.pop(directory, None)
+            self._partial_sizes.discard(directory)
+            self._partial_tokens.discard(directory)
+            return
+
+        for entry in entries:
+            child_path = entry.path
+            if entry.is_dir(follow_symlinks=False):
+                child_size = self._size_cache.get(child_path)
+                if child_size is None:
+                    size_partial = True
+                else:
+                    total_size += child_size
+
+                child_tokens = self._token_counts.get(child_path)
+                if child_tokens is None:
+                    token_partial = True
+                else:
+                    total_tokens += child_tokens
+            else:
+                size_val = self._size_cache.get(child_path)
+                if size_val is None:
+                    try:
+                        size_val = os.path.getsize(child_path)
+                        self._size_cache[child_path] = size_val
+                    except OSError:
+                        size_partial = True
+                    else:
+                        total_size += size_val
+                else:
+                    total_size += size_val
+
+                if self.is_path_checkable(child_path):
+                    tokens_val = self._token_counts.get(child_path)
+                    if tokens_val is None:
+                        token_partial = True
+                    else:
+                        total_tokens += tokens_val
+
+        self._size_cache[directory] = total_size
+        if size_partial:
+            self._partial_sizes.add(directory)
+        else:
+            self._partial_sizes.discard(directory)
+
+        self._token_counts[directory] = total_tokens
+        if token_partial:
+            self._partial_tokens.add(directory)
+        else:
+            self._partial_tokens.discard(directory)
+
+    # ------------------------------------------------------------------
+    # Qt model overrides
     def flags(self, index: QModelIndex) -> Qt.ItemFlag:
-        flags = super().flags(index) | Qt.ItemFlag.ItemIsUserCheckable
-        if self.isDir(index) and TRISTATE_FLAG is not None:
-            flags |= TRISTATE_FLAG
+        flags = super().flags(index)
+        if not index.isValid():
+            return flags
+
+        base_index = index.sibling(index.row(), 0)
+        if not base_index.isValid():
+            return flags
+        path = self.filePath(base_index)
+
+        if self.isDir(base_index):
+            flags |= Qt.ItemFlag.ItemIsUserCheckable
+            if TRISTATE_FLAG is not None:
+                flags |= TRISTATE_FLAG
+        else:
+            if self.is_path_checkable(path):
+                flags |= Qt.ItemFlag.ItemIsUserCheckable
+                flags |= Qt.ItemFlag.ItemIsSelectable
+                flags |= Qt.ItemFlag.ItemIsEnabled
+            else:
+                flags &= ~Qt.ItemFlag.ItemIsUserCheckable
+                flags &= ~Qt.ItemFlag.ItemIsSelectable
+                flags &= ~Qt.ItemFlag.ItemIsEnabled
         return flags
+
+    def headerData(self, section: int, orientation: Qt.Orientation, role: int = Qt.ItemDataRole.DisplayRole):
+        if orientation == Qt.Orientation.Horizontal and role == Qt.ItemDataRole.DisplayRole:
+            if section == 0:
+                return "Name"
+            if section == 1:
+                return "Size"
+            if section == 2:
+                return "Tokens"
+        return super().headerData(section, orientation, role)
 
     def data(self, index: QModelIndex, role: int = Qt.ItemDataRole.DisplayRole):
         if not index.isValid():
             return super().data(index, role)
 
-        path = self.filePath(index)
+        base_index = index.sibling(index.row(), 0)
+        if not base_index.isValid():
+            return super().data(index, role)
+        path = self.filePath(base_index)
         state = self._check_states.get(path, Qt.CheckState.Unchecked)
+        column = index.column()
 
-        if role == Qt.ItemDataRole.CheckStateRole:
+        if role == Qt.ItemDataRole.CheckStateRole and column == 0:
             return state
 
-        if role == Qt.ItemDataRole.FontRole and state == Qt.CheckState.Checked:
+        if role == Qt.ItemDataRole.FontRole and column == 0 and state == Qt.CheckState.Checked:
             return _BOLD_FONT
 
-        if role == Qt.ItemDataRole.BackgroundRole and state in CHECK_STATE_BACKGROUNDS:
+        if role == Qt.ItemDataRole.BackgroundRole and column == 0 and state in CHECK_STATE_BACKGROUNDS:
             return CHECK_STATE_BACKGROUNDS[state]
 
-        if role == Qt.ItemDataRole.ToolTipRole:
-            return CHECK_STATE_TOOLTIPS.get(state)
+        if role == Qt.ItemDataRole.ToolTipRole and column == 0:
+            tooltip_parts: List[str] = []
+            state_tip = CHECK_STATE_TOOLTIPS.get(state)
+            if state_tip:
+                tooltip_parts.append(state_tip)
+            if not self.isDir(base_index) and not self.is_path_checkable(path):
+                tooltip_parts.append(
+                    "This file type cannot be embedded into Markdown responses."
+                )
+            size_tip = self._format_size_display(path)
+            if size_tip:
+                tooltip_parts.append(f"Size: {size_tip}")
+            token_tip = self._format_tokens_display(path)
+            if token_tip:
+                tooltip_parts.append(f"Tokens: {token_tip}")
+            return "\n".join(tooltip_parts) if tooltip_parts else None
+
+        if role == Qt.ItemDataRole.DisplayRole:
+            if column == 1:
+                return self._format_size_display(path) or "—"
+            if column == 2:
+                return self._format_tokens_display(path) or "—"
+
+        if role == Qt.ItemDataRole.TextAlignmentRole and column in (1, 2):
+            return int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 
         return super().data(index, role)
 
     def setData(self, index: QModelIndex, value, role: int = Qt.ItemDataRole.EditRole):
-        if role == Qt.ItemDataRole.CheckStateRole:
+        if role == Qt.ItemDataRole.CheckStateRole and index.column() == 0:
+            base_index = index.sibling(index.row(), 0)
+            path = self.filePath(base_index)
+            if not self.isDir(base_index) and not self.is_path_checkable(path):
+                return False
             state = Qt.CheckState(value)
-            if self._update_index_state(index, state):
+            if self._update_index_state(base_index, state):
                 self.checkStateChanged.emit()
             return True
         return super().setData(index, value, role)
 
+    # ------------------------------------------------------------------
+    # selection helpers
     def clear_checks(self):
         if not self._check_states and not self._checked_files:
             return
@@ -159,20 +375,23 @@ class CheckableFileSystemModel(QFileSystemModel):
         self._checked_files.clear()
         root_index = self.index(self.rootPath())
         if root_index.isValid():
-            self.dataChanged.emit(root_index, root_index)
+            self._emit_index_changed(root_index)
         self.checkStateChanged.emit()
 
     def get_checked_files(self) -> List[str]:
         return sorted(self._checked_files)
 
     def get_check_state(self, index: QModelIndex) -> Qt.CheckState:
-        return self._check_states.get(self.filePath(index), Qt.CheckState.Unchecked)
+        base_index = index.sibling(index.row(), 0)
+        return self._check_states.get(self.filePath(base_index), Qt.CheckState.Unchecked)
 
     def set_path_state(
         self, path: str, state: Qt.CheckState, emit_signal: bool = True
     ) -> bool:
         index = self.index(path)
         if not index.isValid():
+            return False
+        if not self.isDir(index) and not self.is_path_checkable(path):
             return False
         changed = self._update_index_state(index, state)
         if changed and emit_signal:
@@ -190,6 +409,8 @@ class CheckableFileSystemModel(QFileSystemModel):
         index = self.index(path)
         if not index.isValid():
             return
+        if not self.isDir(index) and not self.is_path_checkable(path):
+            return
         current = self.get_check_state(index)
         new_state = (
             Qt.CheckState.Unchecked
@@ -198,6 +419,43 @@ class CheckableFileSystemModel(QFileSystemModel):
         )
         if self._update_index_state(index, new_state):
             self.checkStateChanged.emit()
+
+    def is_path_checkable(self, path: str) -> bool:
+        if not path:
+            return False
+        if os.path.isdir(path):
+            return True
+        _, ext = os.path.splitext(path)
+        return ext.lower() not in self.blocked_extensions
+
+    # ------------------------------------------------------------------
+    # internal helpers
+    def _emit_index_changed(self, index: QModelIndex) -> None:
+        if not index.isValid():
+            return
+        parent = index.parent()
+        last_col = self.columnCount(parent) - 1
+        right_index = index.sibling(index.row(), last_col)
+        left_index = index.sibling(index.row(), 0)
+        self.dataChanged.emit(left_index, right_index)
+
+    def _format_size_display(self, path: str) -> Optional[str]:
+        size = self._size_cache.get(path)
+        if size is None:
+            return None
+        text = human_readable_size(size)
+        if path in self._partial_sizes and size:
+            text += " (partial)"
+        return text
+
+    def _format_tokens_display(self, path: str) -> Optional[str]:
+        tokens = self._token_counts.get(path)
+        if tokens is None:
+            return None
+        text = f"{tokens:,}"
+        if path in self._partial_tokens and tokens:
+            text = f"≈{text}"
+        return text
 
     def _update_index_state(self, index: QModelIndex, state: Qt.CheckState) -> bool:
         if not index.isValid():
@@ -210,12 +468,18 @@ class CheckableFileSystemModel(QFileSystemModel):
     def _apply_state(self, index: QModelIndex, state: Qt.CheckState) -> bool:
         path = self.filePath(index)
         previous = self._check_states.get(path, Qt.CheckState.Unchecked)
+
+        if not self.isDir(index) and not self.is_path_checkable(path):
+            self._check_states[path] = Qt.CheckState.Unchecked
+            self._checked_files.discard(path)
+            return False
+
         changed = previous != state
         self._check_states[path] = state
 
         if self.isDir(index):
             self._checked_files.discard(path)
-            self.dataChanged.emit(index, index)
+            self._emit_index_changed(index)
             for row in range(self.rowCount(index)):
                 child = self.index(row, 0, index)
                 changed = self._apply_state(child, state) or changed
@@ -228,7 +492,7 @@ class CheckableFileSystemModel(QFileSystemModel):
                 if path in self._checked_files:
                     changed = True
                 self._checked_files.discard(path)
-            self.dataChanged.emit(index, index)
+            self._emit_index_changed(index)
 
         return changed
 
@@ -258,7 +522,7 @@ class CheckableFileSystemModel(QFileSystemModel):
             if previous != new_state:
                 self._check_states[path] = new_state
                 changed = True
-                self.dataChanged.emit(parent_index, parent_index)
+                self._emit_index_changed(parent_index)
 
             parent_index = parent_index.parent()
 
@@ -283,6 +547,9 @@ class CheckableFileSystemModel(QFileSystemModel):
 
         if changed:
             self.checkStateChanged.emit()
+
+        # refresh directory metadata now that children are available
+        self._recalculate_directory_totals(path)
 
 
 class DirectoryFilterProxyModel(QSortFilterProxyModel):
@@ -326,7 +593,9 @@ class AIStudioDialog(QDialog):
         self.response_changes: List[Dict] = []
         self.token_cache: Optional[TokenCache] = None
         self.thread_pool = QThreadPool()
-        
+        self._pending_selection_paths: set[str] = set()
+        self._pending_selection_size: int = 0
+
         self.persona_manager = PersonaManager()
         self.style_manager = StylePresetManager()
 
@@ -390,15 +659,22 @@ class AIStudioDialog(QDialog):
         self.proxy_model = DirectoryFilterProxyModel()
         self.proxy_model.setSourceModel(self.file_model)
         self.file_tree.setModel(self.proxy_model)
-        self.file_tree.setHeaderHidden(True)
-        for i in range(1, self.file_model.columnCount()):
-            self.file_tree.hideColumn(i)
+        self.file_tree.setHeaderHidden(False)
+        header = self.file_tree.header()
+        header.setStretchLastSection(False)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        # Hide remaining QFileSystemModel columns beyond Tokens
+        for column in range(3, self.file_model.columnCount()):
+            self.file_tree.hideColumn(column)
         context_layout.addWidget(self.file_tree)
 
         # --- Selection Info Label ---
-        self.selection_info_label = QLabel("Selected: 0 files (0 tokens)")
+        self.selection_info_label = QLabel()
+        self._set_selection_summary(0, 0, "0 tokens")
         context_layout.addWidget(self.selection_info_label)
-        
+
         layout.addWidget(context_group, 1)
 
         # --- Connections ---
@@ -524,17 +800,45 @@ class AIStudioDialog(QDialog):
         if path and os.path.isdir(path):
             self.project_root = path
             self.token_cache = TokenCache(path)
+            self.file_model.set_project_root(path)
             source_index = self.file_model.setRootPath(path)
             self.file_model.clear_checks()
             proxy_index = self.proxy_model.mapFromSource(source_index)
             self.file_tree.setRootIndex(proxy_index)
+            self._set_selection_summary(0, 0, "0 tokens")
+            self._start_project_scan()
         else:
             self.project_root = None
             self.token_cache = None
+            self.file_model.set_project_root(None)
             self.file_model.setRootPath("")
             self.file_model.clear_checks()
+            self._set_selection_summary(0, 0, "0 tokens")
             self.status_bar.showMessage("Please select a valid project.")
         self._update_ui_state()
+
+    def _start_project_scan(self) -> None:
+        if not self.project_root:
+            return
+
+        worker = TokenCountWorker(
+            self.project_root,
+            [self.project_root],
+            self.token_cache,
+            exclude_dirs=EXCLUDE_DIRS,
+            skip_extensions=self.file_model.blocked_extensions,
+        )
+        worker.signals.finished.connect(
+            partial(self._on_token_count_finished, purpose="project")
+        )
+        self.thread_pool.start(worker)
+        self.status_bar.showMessage("Scanning project for file sizes and token counts…")
+
+    def _set_selection_summary(self, file_count: int, total_size: int, token_text: str) -> None:
+        size_text = human_readable_size(total_size)
+        self.selection_info_label.setText(
+            f"Selected: {file_count} files ({size_text}, {token_text})"
+        )
 
     def _get_selected_file_paths(self) -> List[str]:
         if not self.project_root:
@@ -545,20 +849,78 @@ class AIStudioDialog(QDialog):
         selected_files = self._get_selected_file_paths()
         count = len(selected_files)
         if count == 0:
-            self.selection_info_label.setText("Selected: 0 files (0 tokens)")
+            self._pending_selection_paths = set()
+            self._pending_selection_size = 0
+            self._set_selection_summary(0, 0, "0 tokens")
             return
-        
-        self.selection_info_label.setText(f"Selected: {count} files (Calculating tokens...)")
+
+        total_size = 0
+        for path in selected_files:
+            try:
+                total_size += os.path.getsize(path)
+            except OSError:
+                continue
+
+        self._pending_selection_paths = set(selected_files)
+        self._pending_selection_size = total_size
+        self._set_selection_summary(count, total_size, "calculating tokens…")
+
         if self.project_root and self.token_cache:
-            worker = TokenCountWorker(self.project_root, selected_files, self.token_cache)
-            worker.signals.finished.connect(self._on_token_count_finished)
+            worker = TokenCountWorker(
+                self.project_root,
+                selected_files,
+                self.token_cache,
+                exclude_dirs=EXCLUDE_DIRS,
+                skip_extensions=self.file_model.blocked_extensions,
+            )
+            worker.signals.finished.connect(
+                partial(self._on_token_count_finished, purpose="selection")
+            )
             self.thread_pool.start(worker)
 
-    def _on_token_count_finished(self, success: bool, counts: Dict[str, int]):
-        if success:
-            total_tokens = sum(counts.values())
-            file_count = len(self._get_selected_file_paths())
-            self.selection_info_label.setText(f"Selected: {file_count} files ({total_tokens:,} tokens)")
+    def _on_token_count_finished(
+        self,
+        success: bool,
+        metadata: Dict[str, Dict[str, int]],
+        purpose: str,
+    ) -> None:
+        if metadata:
+            self.file_model.apply_metadata(metadata)
+
+        if purpose == "selection":
+            current_selection = set(self._get_selected_file_paths())
+            if current_selection != self._pending_selection_paths:
+                # Selection changed while the worker was running; a new update will follow.
+                return
+
+            if not success:
+                self._set_selection_summary(
+                    len(self._pending_selection_paths),
+                    self._pending_selection_size,
+                    "token scan failed",
+                )
+                return
+
+            total_tokens = 0
+            for path in self._pending_selection_paths:
+                tokens = self.file_model.get_cached_tokens(path)
+                if tokens is not None:
+                    total_tokens += tokens
+
+            self._set_selection_summary(
+                len(self._pending_selection_paths),
+                self._pending_selection_size,
+                f"{total_tokens:,} tokens",
+            )
+        elif purpose == "project":
+            if success:
+                self.status_bar.showMessage(
+                    "Indexed project files for size and token estimates."
+                )
+            else:
+                self.status_bar.showMessage(
+                    "Failed to scan project for file metadata."
+                )
 
     def _expand_all(self):
         self.file_tree.expandAll()
@@ -596,7 +958,9 @@ class AIStudioDialog(QDialog):
                 if self.file_model.isDir(source_index):
                     recurse(proxy_index)
                 else:
-                    to_toggle.append(self.file_model.filePath(source_index))
+                    file_path = self.file_model.filePath(source_index)
+                    if self.file_model.is_path_checkable(file_path):
+                        to_toggle.append(file_path)
 
         recurse(self.file_tree.rootIndex())
 
@@ -640,6 +1004,8 @@ class AIStudioDialog(QDialog):
         first_index = None
         changed = False
         for file_path in recommended_files:
+            if not self.file_model.is_path_checkable(file_path):
+                continue
             changed = (
                 self.file_model.set_path_state(
                     file_path, Qt.CheckState.Checked, emit_signal=False
