@@ -55,6 +55,12 @@ from .diff_preview_dialog import DiffPreviewDialog
 
 EXCLUDE_DIRS = {'.git', '__pycache__', 'venv', '.venv', 'ai_exports', 'node_modules', 'dist', 'build'}
 
+TRISTATE_FLAG = getattr(
+    Qt.ItemFlag,
+    "ItemIsTristate",
+    getattr(Qt.ItemFlag, "ItemIsAutoTristate", None),
+)
+
 
 class CheckableFileSystemModel(QFileSystemModel):
     """A file system model that keeps track of per-path check states."""
@@ -69,8 +75,8 @@ class CheckableFileSystemModel(QFileSystemModel):
 
     def flags(self, index: QModelIndex) -> Qt.ItemFlag:
         flags = super().flags(index) | Qt.ItemFlag.ItemIsUserCheckable
-        if self.isDir(index):
-            flags |= Qt.ItemFlag.ItemIsTristate
+        if self.isDir(index) and TRISTATE_FLAG is not None:
+            flags |= TRISTATE_FLAG
         return flags
 
     def data(self, index: QModelIndex, role: int = Qt.ItemDataRole.DisplayRole):
