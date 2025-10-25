@@ -16,7 +16,14 @@ from PyQt6.QtCore import (
     QItemSelectionModel,
     pyqtSignal,
 )
-from PyQt6.QtGui import QStandardItemModel, QStandardItem, QFileSystemModel
+from PyQt6.QtGui import (
+    QStandardItemModel,
+    QStandardItem,
+    QFileSystemModel,
+    QFont,
+    QBrush,
+    QColor,
+)
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QSplitter, QWidget, QGroupBox,
     QTreeView, QTextEdit, QPushButton, QDialogButtonBox, QMessageBox,
@@ -62,6 +69,29 @@ TRISTATE_FLAG = getattr(
 )
 
 
+CHECK_STATE_ICONS = {
+    Qt.CheckState.Unchecked: qta.icon("fa5s.square"),
+    Qt.CheckState.Checked: qta.icon("fa5s.check-square"),
+    Qt.CheckState.PartiallyChecked: qta.icon("fa5s.minus-square"),
+}
+
+CHECK_STATE_TOOLTIPS = {
+    Qt.CheckState.Unchecked: "Not included in the current request.",
+    Qt.CheckState.Checked: "Included in the current request.",
+    Qt.CheckState.PartiallyChecked: (
+        "Partially included – some child items are selected."
+    ),
+}
+
+_BOLD_FONT = QFont()
+_BOLD_FONT.setBold(True)
+
+CHECK_STATE_BACKGROUNDS = {
+    Qt.CheckState.Checked: QBrush(QColor(76, 175, 80, 45)),
+    Qt.CheckState.PartiallyChecked: QBrush(QColor(255, 193, 7, 45)),
+}
+
+
 class CheckableFileSystemModel(QFileSystemModel):
     """A file system model that keeps track of per-path check states."""
 
@@ -80,9 +110,29 @@ class CheckableFileSystemModel(QFileSystemModel):
         return flags
 
     def data(self, index: QModelIndex, role: int = Qt.ItemDataRole.DisplayRole):
+        if not index.isValid():
+            return super().data(index, role)
+
+        path = self.filePath(index)
+        state = self._check_states.get(path, Qt.CheckState.Unchecked)
+
         if role == Qt.ItemDataRole.CheckStateRole:
-            path = self.filePath(index)
-            return self._check_states.get(path, Qt.CheckState.Unchecked)
+            return state
+
+        if role == Qt.ItemDataRole.DecorationRole and index.column() == 0:
+            icon = CHECK_STATE_ICONS.get(state)
+            if icon is not None:
+                return icon
+
+        if role == Qt.ItemDataRole.FontRole and state == Qt.CheckState.Checked:
+            return _BOLD_FONT
+
+        if role == Qt.ItemDataRole.BackgroundRole and state in CHECK_STATE_BACKGROUNDS:
+            return CHECK_STATE_BACKGROUNDS[state]
+
+        if role == Qt.ItemDataRole.ToolTipRole:
+            return CHECK_STATE_TOOLTIPS.get(state)
+
         return super().data(index, role)
 
     def setData(self, index: QModelIndex, value, role: int = Qt.ItemDataRole.EditRole):
