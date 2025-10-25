@@ -86,6 +86,26 @@ CHECK_STATE_BACKGROUNDS = {
 }
 
 
+CHECKBOX_STYLESHEET = """
+QTreeView::indicator {
+    width: 18px;
+    height: 18px;
+}
+QTreeView::indicator:unchecked {
+    border: 1px solid rgba(255, 255, 255, 45);
+    background-color: rgba(0, 0, 0, 0);
+}
+QTreeView::indicator:checked {
+    border: 1px solid #4CAF50;
+    background-color: rgba(76, 175, 80, 0.35);
+}
+QTreeView::indicator:indeterminate {
+    border: 1px solid #FFC107;
+    background-color: rgba(255, 193, 7, 0.35);
+}
+"""
+
+
 class CheckableFileSystemModel(QFileSystemModel):
     """A file system model that keeps track of per-path check states."""
 
@@ -364,6 +384,7 @@ class AIStudioDialog(QDialog):
         # --- File Tree ---
         self.file_tree = QTreeView()
         self.file_tree.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.file_tree.setStyleSheet(CHECKBOX_STYLESHEET)
         self.file_model = CheckableFileSystemModel()
         self.file_model.setRootPath("")
         self.proxy_model = DirectoryFilterProxyModel()
