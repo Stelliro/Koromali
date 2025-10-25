@@ -204,8 +204,14 @@ class CheckableFileSystemModel(QFileSystemModel):
         root = self._project_root
 
         while parent_path:
-            if root and os.path.commonpath([root, parent_path]) != root:
-                break
+            if root:
+                try:
+                    if os.path.commonpath([root, parent_path]) != root:
+                        break
+                except ValueError:
+                    # Windows raises ValueError when paths are on different drives.
+                    # Treat those as outside the project root and stop propagating.
+                    break
             parent_index = self.index(parent_path)
             if not parent_index.isValid():
                 break
