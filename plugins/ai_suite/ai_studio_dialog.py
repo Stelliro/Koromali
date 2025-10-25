@@ -137,7 +137,7 @@ class CheckableFileSystemModel(QFileSystemModel):
     # ------------------------------------------------------------------
     # metadata helpers
     def set_project_root(self, project_root: Optional[str]) -> None:
-        self._project_root = os.path.abspath(project_root) if project_root else None
+        self._project_root = self._normalize_path(project_root) if project_root else None
         self.reset_metadata()
 
     def reset_metadata(self) -> None:
@@ -152,7 +152,7 @@ class CheckableFileSystemModel(QFileSystemModel):
 
         changed_indexes: set[QModelIndex] = set()
         for path, payload in metadata.items():
-            abs_path = os.path.abspath(path)
+            abs_path = self._normalize_path(path)
             size = payload.get("size")
             tokens = payload.get("tokens")
             changed_indexes.update(
@@ -163,10 +163,16 @@ class CheckableFileSystemModel(QFileSystemModel):
             self._emit_index_changed(index)
 
     def get_cached_size(self, path: str) -> Optional[int]:
-        return self._size_cache.get(os.path.abspath(path))
+        return self._size_cache.get(self._normalize_path(path))
 
     def get_cached_tokens(self, path: str) -> Optional[int]:
-        return self._token_counts.get(os.path.abspath(path))
+        return self._token_counts.get(self._normalize_path(path))
+
+    @staticmethod
+    def _normalize_path(path: Optional[str]) -> str:
+        if not path:
+            return ""
+        return os.path.normpath(os.path.abspath(path))
 
     def _store_metadata(
         self,
@@ -176,19 +182,20 @@ class CheckableFileSystemModel(QFileSystemModel):
         tokens: Optional[int] = None,
     ) -> set[QModelIndex]:
         changed: set[QModelIndex] = set()
-        index = self.index(path)
+        norm_path = self._normalize_path(path)
+        index = self.index(norm_path)
         if size is not None:
-            self._size_cache[path] = int(size)
-            self._partial_sizes.discard(path)
+            self._size_cache[norm_path] = int(size)
+            self._partial_sizes.discard(norm_path)
             if index.isValid():
                 changed.add(index)
         if tokens is not None:
-            self._token_counts[path] = int(tokens)
-            self._partial_tokens.discard(path)
+            self._token_counts[norm_path] = int(tokens)
+            self._partial_tokens.discard(norm_path)
             if index.isValid():
                 changed.add(index)
 
-        changed.update(self._propagate_metadata_to_parents(path))
+        changed.update(self._propagate_metadata_to_parents(norm_path))
         return changed
 
     def _propagate_metadata_to_parents(self, path: str) -> set[QModelIndex]:
@@ -208,6 +215,7 @@ class CheckableFileSystemModel(QFileSystemModel):
         return changed
 
     def _recalculate_directory_totals(self, directory: str) -> None:
+        directory = self._normalize_path(directory)
         total_size = 0
         total_tokens = 0
         size_partial = False
@@ -224,7 +232,7 @@ class CheckableFileSystemModel(QFileSystemModel):
             return
 
         for entry in entries:
-            child_path = entry.path
+            child_path = self._normalize_path(entry.path)
             if entry.is_dir(follow_symlinks=False):
                 child_size = self._size_cache.get(child_path)
                 if child_size is None:
@@ -279,7 +287,7 @@ class CheckableFileSystemModel(QFileSystemModel):
         base_index = index.sibling(index.row(), 0)
         if not base_index.isValid():
             return flags
-        path = self.filePath(base_index)
+        path = self._normalize_path(self.filePath(base_index))
 
         if self.isDir(base_index):
             flags |= Qt.ItemFlag.ItemIsUserCheckable
@@ -313,7 +321,7 @@ class CheckableFileSystemModel(QFileSystemModel):
         base_index = index.sibling(index.row(), 0)
         if not base_index.isValid():
             return super().data(index, role)
-        path = self.filePath(base_index)
+        path = self._normalize_path(self.filePath(base_index))
         state = self._check_states.get(path, Qt.CheckState.Unchecked)
         column = index.column()
 
@@ -357,7 +365,7 @@ class CheckableFileSystemModel(QFileSystemModel):
     def setData(self, index: QModelIndex, value, role: int = Qt.ItemDataRole.EditRole):
         if role == Qt.ItemDataRole.CheckStateRole and index.column() == 0:
             base_index = index.sibling(index.row(), 0)
-            path = self.filePath(base_index)
+            path = self._normalize_path(self.filePath(base_index))
             if not self.isDir(base_index) and not self.is_path_checkable(path):
                 return False
             state = Qt.CheckState(value)
@@ -383,15 +391,19 @@ class CheckableFileSystemModel(QFileSystemModel):
 
     def get_check_state(self, index: QModelIndex) -> Qt.CheckState:
         base_index = index.sibling(index.row(), 0)
-        return self._check_states.get(self.filePath(base_index), Qt.CheckState.Unchecked)
+        return self._check_states.get(
+            self._normalize_path(self.filePath(base_index)),
+            Qt.CheckState.Unchecked,
+        )
 
     def set_path_state(
         self, path: str, state: Qt.CheckState, emit_signal: bool = True
     ) -> bool:
-        index = self.index(path)
+        norm_path = self._normalize_path(path)
+        index = self.index(norm_path)
         if not index.isValid():
             return False
-        if not self.isDir(index) and not self.is_path_checkable(path):
+        if not self.isDir(index) and not self.is_path_checkable(norm_path):
             return False
         changed = self._update_index_state(index, state)
         if changed and emit_signal:
@@ -399,17 +411,19 @@ class CheckableFileSystemModel(QFileSystemModel):
         return changed
 
     def set_all_under_path(self, path: str, state: Qt.CheckState):
-        index = self.index(path)
+        norm_path = self._normalize_path(path)
+        index = self.index(norm_path)
         if not index.isValid():
             return
         if self._update_index_state(index, state):
             self.checkStateChanged.emit()
 
     def toggle_path(self, path: str):
-        index = self.index(path)
+        norm_path = self._normalize_path(path)
+        index = self.index(norm_path)
         if not index.isValid():
             return
-        if not self.isDir(index) and not self.is_path_checkable(path):
+        if not self.isDir(index) and not self.is_path_checkable(norm_path):
             return
         current = self.get_check_state(index)
         new_state = (
@@ -421,11 +435,12 @@ class CheckableFileSystemModel(QFileSystemModel):
             self.checkStateChanged.emit()
 
     def is_path_checkable(self, path: str) -> bool:
-        if not path:
+        norm_path = self._normalize_path(path)
+        if not norm_path:
             return False
-        if os.path.isdir(path):
+        if os.path.isdir(norm_path):
             return True
-        _, ext = os.path.splitext(path)
+        _, ext = os.path.splitext(norm_path)
         return ext.lower() not in self.blocked_extensions
 
     # ------------------------------------------------------------------
@@ -440,20 +455,22 @@ class CheckableFileSystemModel(QFileSystemModel):
         self.dataChanged.emit(left_index, right_index)
 
     def _format_size_display(self, path: str) -> Optional[str]:
-        size = self._size_cache.get(path)
+        norm_path = self._normalize_path(path)
+        size = self._size_cache.get(norm_path)
         if size is None:
             return None
         text = human_readable_size(size)
-        if path in self._partial_sizes and size:
+        if norm_path in self._partial_sizes and size:
             text += " (partial)"
         return text
 
     def _format_tokens_display(self, path: str) -> Optional[str]:
-        tokens = self._token_counts.get(path)
+        norm_path = self._normalize_path(path)
+        tokens = self._token_counts.get(norm_path)
         if tokens is None:
             return None
         text = f"{tokens:,}"
-        if path in self._partial_tokens and tokens:
+        if norm_path in self._partial_tokens and tokens:
             text = f"≈{text}"
         return text
 
@@ -466,7 +483,7 @@ class CheckableFileSystemModel(QFileSystemModel):
         return changed or parent_changed
 
     def _apply_state(self, index: QModelIndex, state: Qt.CheckState) -> bool:
-        path = self.filePath(index)
+        path = self._normalize_path(self.filePath(index))
         previous = self._check_states.get(path, Qt.CheckState.Unchecked)
 
         if not self.isDir(index) and not self.is_path_checkable(path):
@@ -499,12 +516,12 @@ class CheckableFileSystemModel(QFileSystemModel):
     def _update_parent_state(self, parent_index: QModelIndex) -> bool:
         changed = False
         while parent_index.isValid():
-            path = self.filePath(parent_index)
+            path = self._normalize_path(self.filePath(parent_index))
             child_states = []
             for row in range(self.rowCount(parent_index)):
                 child = self.index(row, 0, parent_index)
                 child_state = self._check_states.get(
-                    self.filePath(child), Qt.CheckState.Unchecked
+                    self._normalize_path(self.filePath(child)), Qt.CheckState.Unchecked
                 )
                 child_states.append(child_state)
 
@@ -529,18 +546,19 @@ class CheckableFileSystemModel(QFileSystemModel):
         return changed
 
     def _on_directory_loaded(self, path: str):
-        index = self.index(path)
+        norm_path = self._normalize_path(path)
+        index = self.index(norm_path)
         if not index.isValid():
             return
 
-        parent_state = self._check_states.get(path, Qt.CheckState.Unchecked)
+        parent_state = self._check_states.get(norm_path, Qt.CheckState.Unchecked)
         if parent_state == Qt.CheckState.PartiallyChecked:
             return
 
         changed = False
         for row in range(self.rowCount(index)):
             child = self.index(row, 0, index)
-            child_path = self.filePath(child)
+            child_path = self._normalize_path(self.filePath(child))
             child_state = self._check_states.get(child_path, Qt.CheckState.Unchecked)
             if child_state != parent_state:
                 changed = self._apply_state(child, parent_state) or changed
@@ -549,7 +567,7 @@ class CheckableFileSystemModel(QFileSystemModel):
             self.checkStateChanged.emit()
 
         # refresh directory metadata now that children are available
-        self._recalculate_directory_totals(path)
+        self._recalculate_directory_totals(norm_path)
 
 
 class DirectoryFilterProxyModel(QSortFilterProxyModel):
