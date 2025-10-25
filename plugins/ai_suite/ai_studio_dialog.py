@@ -69,12 +69,6 @@ TRISTATE_FLAG = getattr(
 )
 
 
-CHECK_STATE_ICONS = {
-    Qt.CheckState.Unchecked: qta.icon("fa5s.square"),
-    Qt.CheckState.Checked: qta.icon("fa5s.check-square"),
-    Qt.CheckState.PartiallyChecked: qta.icon("fa5s.minus-square"),
-}
-
 CHECK_STATE_TOOLTIPS = {
     Qt.CheckState.Unchecked: "Not included in the current request.",
     Qt.CheckState.Checked: "Included in the current request.",
@@ -118,11 +112,6 @@ class CheckableFileSystemModel(QFileSystemModel):
 
         if role == Qt.ItemDataRole.CheckStateRole:
             return state
-
-        if role == Qt.ItemDataRole.DecorationRole and index.column() == 0:
-            icon = CHECK_STATE_ICONS.get(state)
-            if icon is not None:
-                return icon
 
         if role == Qt.ItemDataRole.FontRole and state == Qt.CheckState.Checked:
             return _BOLD_FONT
