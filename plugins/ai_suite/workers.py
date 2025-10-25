@@ -1,7 +1,7 @@
 # /plugins/ai_suite/workers.py
 from __future__ import annotations
 import os
-from typing import Dict, Iterator, List, Optional
+from typing import Dict, Iterator, List, Optional, Tuple
 
 from PyQt6.QtCore import QRunnable, QObject, pyqtSignal
 
@@ -16,6 +16,9 @@ except Exception:  # pragma: no cover
 
 class _Signals(QObject):
     finished = pyqtSignal(bool, dict)  # (success, {path: {"tokens": int, "size": int}})
+
+
+MAX_TOKEN_ANALYSIS_BYTES = 512 * 1024  # 512 KiB cap for full token analysis
 
 class TokenCountWorker(QRunnable):
     """Background token counting for a list of files.
@@ -46,19 +49,36 @@ class TokenCountWorker(QRunnable):
         # 1 token ~ 4 chars heuristic
         return max(1, int(len(text) / 4))
 
-    def _estimate_tokens_for_file(self, path: str) -> Optional[int]:
+    def _estimate_tokens_for_file(
+        self, path: str, file_size: Optional[int]
+    ) -> Tuple[Optional[int], bool]:
+        """Return a token estimate and whether the file exceeded the analysis cap."""
+
         try:
             # Skip obviously binary by scanning for NUL bytes in first chunk
             with open(path, "rb") as fb:
                 head = fb.read(4096)
                 if b"\x00" in head:
-                    return None
-            # Read as text ignoring errors
+                    return None, False
+        except Exception:
+            return None, False
+
+        try:
+            size = file_size if file_size is not None else os.path.getsize(path)
+        except OSError:
+            size = None
+
+        if size is not None and size > MAX_TOKEN_ANALYSIS_BYTES:
+            approx = max(1, int(size / 4))
+            return approx, True
+
+        try:
+            # Read as text ignoring errors for manageable files
             with open(path, "r", encoding="utf-8", errors="ignore") as ft:
                 text = ft.read()
-            return self._estimate_tokens_for_text(text)
+            return self._estimate_tokens_for_text(text), False
         except Exception:
-            return None
+            return None, False
 
     def _iter_files(self) -> Iterator[str]:
         for path in self.file_paths:
@@ -90,7 +110,7 @@ class TokenCountWorker(QRunnable):
 
     def run(self) -> None:
         try:
-            results: Dict[str, Dict[str, int]] = {}
+            results: Dict[str, Dict[str, object]] = {}
             for fp in self._iter_files():
                 if self._should_skip(fp):
                     continue
@@ -102,19 +122,21 @@ class TokenCountWorker(QRunnable):
                     size = None
 
                 if cached is not None:
-                    payload: Dict[str, int] = {"tokens": int(cached)}
+                    payload: Dict[str, object] = {"tokens": int(cached)}
                     if size is not None:
                         payload["size"] = int(size)
                     results[fp] = payload
                     continue
 
-                est = self._estimate_tokens_for_file(fp)
+                est, overflow = self._estimate_tokens_for_file(fp, size)
                 if est is not None:
-                    payload = {"tokens": int(est)}
+                    payload: Dict[str, object] = {"tokens": int(est)}
                     if size is not None:
                         payload["size"] = int(size)
+                    if overflow:
+                        payload["tokens_overflow"] = True
                     results[fp] = payload
-                    if self.token_cache:
+                    if self.token_cache and not overflow:
                         self.token_cache.set(fp, est)
                 elif size is not None:
                     results[fp] = {"size": int(size)}

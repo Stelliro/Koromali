@@ -132,6 +132,7 @@ class CheckableFileSystemModel(QFileSystemModel):
         self._size_cache: Dict[str, int] = {}
         self._partial_tokens: set[str] = set()
         self._partial_sizes: set[str] = set()
+        self._token_overflow: set[str] = set()
         self.directoryLoaded.connect(self._on_directory_loaded)
 
     # ------------------------------------------------------------------
@@ -145,8 +146,9 @@ class CheckableFileSystemModel(QFileSystemModel):
         self._size_cache.clear()
         self._partial_tokens.clear()
         self._partial_sizes.clear()
+        self._token_overflow.clear()
 
-    def apply_metadata(self, metadata: Dict[str, Dict[str, int]]) -> None:
+    def apply_metadata(self, metadata: Dict[str, Dict[str, object]]) -> None:
         if not metadata:
             return
 
@@ -155,8 +157,14 @@ class CheckableFileSystemModel(QFileSystemModel):
             abs_path = self._normalize_path(path)
             size = payload.get("size")
             tokens = payload.get("tokens")
+            tokens_overflow = bool(payload.get("tokens_overflow")) if payload else False
             changed_indexes.update(
-                self._store_metadata(abs_path, size=size, tokens=tokens)
+                self._store_metadata(
+                    abs_path,
+                    size=size,
+                    tokens=tokens,
+                    tokens_overflow=tokens_overflow,
+                )
             )
 
         for index in changed_indexes:
@@ -180,6 +188,7 @@ class CheckableFileSystemModel(QFileSystemModel):
         *,
         size: Optional[int] = None,
         tokens: Optional[int] = None,
+        tokens_overflow: bool = False,
     ) -> set[QModelIndex]:
         changed: set[QModelIndex] = set()
         norm_path = self._normalize_path(path)
@@ -194,6 +203,10 @@ class CheckableFileSystemModel(QFileSystemModel):
             self._partial_tokens.discard(norm_path)
             if index.isValid():
                 changed.add(index)
+        if tokens_overflow:
+            self._token_overflow.add(norm_path)
+        else:
+            self._token_overflow.discard(norm_path)
 
         changed.update(self._propagate_metadata_to_parents(norm_path))
         return changed
@@ -226,6 +239,7 @@ class CheckableFileSystemModel(QFileSystemModel):
         total_tokens = 0
         size_partial = False
         token_partial = False
+        token_overflow = False
 
         try:
             with os.scandir(directory) as it:
@@ -251,6 +265,8 @@ class CheckableFileSystemModel(QFileSystemModel):
                     token_partial = True
                 else:
                     total_tokens += child_tokens
+                if child_path in self._token_overflow:
+                    token_overflow = True
             else:
                 size_val = self._size_cache.get(child_path)
                 if size_val is None:
@@ -270,6 +286,8 @@ class CheckableFileSystemModel(QFileSystemModel):
                         token_partial = True
                     else:
                         total_tokens += tokens_val
+                    if child_path in self._token_overflow:
+                        token_overflow = True
 
         self._size_cache[directory] = total_size
         if size_partial:
@@ -282,6 +300,10 @@ class CheckableFileSystemModel(QFileSystemModel):
             self._partial_tokens.add(directory)
         else:
             self._partial_tokens.discard(directory)
+        if token_overflow and total_tokens:
+            self._token_overflow.add(directory)
+        else:
+            self._token_overflow.discard(directory)
 
     # ------------------------------------------------------------------
     # Qt model overrides
@@ -355,6 +377,10 @@ class CheckableFileSystemModel(QFileSystemModel):
             token_tip = self._format_tokens_display(path)
             if token_tip:
                 tooltip_parts.append(f"Tokens: {token_tip}")
+            if path in self._token_overflow:
+                tooltip_parts.append(
+                    "Token count exceeds the quick-scan limit. Value is a lower bound."
+                )
             return "\n".join(tooltip_parts) if tooltip_parts else None
 
         if role == Qt.ItemDataRole.DisplayRole:
@@ -476,7 +502,9 @@ class CheckableFileSystemModel(QFileSystemModel):
         if tokens is None:
             return None
         text = f"{tokens:,}"
-        if norm_path in self._partial_tokens and tokens:
+        if norm_path in self._token_overflow and tokens:
+            text = f"Above {text}"
+        elif norm_path in self._partial_tokens and tokens:
             text = f"≈{text}"
         return text
 
