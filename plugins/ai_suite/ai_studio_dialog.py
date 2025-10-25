@@ -8,8 +8,15 @@ import re
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Iterator, TYPE_CHECKING
 
-from PyQt6.QtCore import Qt, QSortFilterProxyModel, QDir, QModelIndex, QThreadPool, QItemSelectionModel
-from PyQt6.QtGui import QStandardItemModel, QStandardItem, QFont, QFileSystemModel
+from PyQt6.QtCore import (
+    Qt,
+    QSortFilterProxyModel,
+    QModelIndex,
+    QThreadPool,
+    QItemSelectionModel,
+    pyqtSignal,
+)
+from PyQt6.QtGui import QStandardItemModel, QStandardItem, QFileSystemModel
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QSplitter, QWidget, QGroupBox,
     QTreeView, QTextEdit, QPushButton, QDialogButtonBox, QMessageBox,
@@ -47,6 +54,170 @@ from .diff_preview_dialog import DiffPreviewDialog
 
 
 EXCLUDE_DIRS = {'.git', '__pycache__', 'venv', '.venv', 'ai_exports', 'node_modules', 'dist', 'build'}
+
+
+class CheckableFileSystemModel(QFileSystemModel):
+    """A file system model that keeps track of per-path check states."""
+
+    checkStateChanged = pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._check_states: Dict[str, Qt.CheckState] = {}
+        self._checked_files: set[str] = set()
+        self.directoryLoaded.connect(self._on_directory_loaded)
+
+    def flags(self, index: QModelIndex) -> Qt.ItemFlag:
+        flags = super().flags(index) | Qt.ItemFlag.ItemIsUserCheckable
+        if self.isDir(index):
+            flags |= Qt.ItemFlag.ItemIsTristate
+        return flags
+
+    def data(self, index: QModelIndex, role: int = Qt.ItemDataRole.DisplayRole):
+        if role == Qt.ItemDataRole.CheckStateRole:
+            path = self.filePath(index)
+            return self._check_states.get(path, Qt.CheckState.Unchecked)
+        return super().data(index, role)
+
+    def setData(self, index: QModelIndex, value, role: int = Qt.ItemDataRole.EditRole):
+        if role == Qt.ItemDataRole.CheckStateRole:
+            state = Qt.CheckState(value)
+            if self._update_index_state(index, state):
+                self.checkStateChanged.emit()
+            return True
+        return super().setData(index, value, role)
+
+    def clear_checks(self):
+        if not self._check_states and not self._checked_files:
+            return
+        self._check_states.clear()
+        self._checked_files.clear()
+        root_index = self.index(self.rootPath())
+        if root_index.isValid():
+            self.dataChanged.emit(root_index, root_index)
+        self.checkStateChanged.emit()
+
+    def get_checked_files(self) -> List[str]:
+        return sorted(self._checked_files)
+
+    def get_check_state(self, index: QModelIndex) -> Qt.CheckState:
+        return self._check_states.get(self.filePath(index), Qt.CheckState.Unchecked)
+
+    def set_path_state(
+        self, path: str, state: Qt.CheckState, emit_signal: bool = True
+    ) -> bool:
+        index = self.index(path)
+        if not index.isValid():
+            return False
+        changed = self._update_index_state(index, state)
+        if changed and emit_signal:
+            self.checkStateChanged.emit()
+        return changed
+
+    def set_all_under_path(self, path: str, state: Qt.CheckState):
+        index = self.index(path)
+        if not index.isValid():
+            return
+        if self._update_index_state(index, state):
+            self.checkStateChanged.emit()
+
+    def toggle_path(self, path: str):
+        index = self.index(path)
+        if not index.isValid():
+            return
+        current = self.get_check_state(index)
+        new_state = (
+            Qt.CheckState.Unchecked
+            if current == Qt.CheckState.Checked
+            else Qt.CheckState.Checked
+        )
+        if self._update_index_state(index, new_state):
+            self.checkStateChanged.emit()
+
+    def _update_index_state(self, index: QModelIndex, state: Qt.CheckState) -> bool:
+        if not index.isValid():
+            return False
+
+        changed = self._apply_state(index, state)
+        parent_changed = self._update_parent_state(index.parent())
+        return changed or parent_changed
+
+    def _apply_state(self, index: QModelIndex, state: Qt.CheckState) -> bool:
+        path = self.filePath(index)
+        previous = self._check_states.get(path, Qt.CheckState.Unchecked)
+        changed = previous != state
+        self._check_states[path] = state
+
+        if self.isDir(index):
+            self._checked_files.discard(path)
+            self.dataChanged.emit(index, index)
+            for row in range(self.rowCount(index)):
+                child = self.index(row, 0, index)
+                changed = self._apply_state(child, state) or changed
+        else:
+            if state == Qt.CheckState.Checked:
+                if path not in self._checked_files:
+                    changed = True
+                self._checked_files.add(path)
+            else:
+                if path in self._checked_files:
+                    changed = True
+                self._checked_files.discard(path)
+            self.dataChanged.emit(index, index)
+
+        return changed
+
+    def _update_parent_state(self, parent_index: QModelIndex) -> bool:
+        changed = False
+        while parent_index.isValid():
+            path = self.filePath(parent_index)
+            child_states = []
+            for row in range(self.rowCount(parent_index)):
+                child = self.index(row, 0, parent_index)
+                child_state = self._check_states.get(
+                    self.filePath(child), Qt.CheckState.Unchecked
+                )
+                child_states.append(child_state)
+
+            if child_states:
+                if all(state == Qt.CheckState.Checked for state in child_states):
+                    new_state = Qt.CheckState.Checked
+                elif all(state == Qt.CheckState.Unchecked for state in child_states):
+                    new_state = Qt.CheckState.Unchecked
+                else:
+                    new_state = Qt.CheckState.PartiallyChecked
+            else:
+                new_state = self._check_states.get(path, Qt.CheckState.Unchecked)
+
+            previous = self._check_states.get(path, Qt.CheckState.Unchecked)
+            if previous != new_state:
+                self._check_states[path] = new_state
+                changed = True
+                self.dataChanged.emit(parent_index, parent_index)
+
+            parent_index = parent_index.parent()
+
+        return changed
+
+    def _on_directory_loaded(self, path: str):
+        index = self.index(path)
+        if not index.isValid():
+            return
+
+        parent_state = self._check_states.get(path, Qt.CheckState.Unchecked)
+        if parent_state == Qt.CheckState.PartiallyChecked:
+            return
+
+        changed = False
+        for row in range(self.rowCount(index)):
+            child = self.index(row, 0, index)
+            child_path = self.filePath(child)
+            child_state = self._check_states.get(child_path, Qt.CheckState.Unchecked)
+            if child_state != parent_state:
+                changed = self._apply_state(child, parent_state) or changed
+
+        if changed:
+            self.checkStateChanged.emit()
 
 
 class DirectoryFilterProxyModel(QSortFilterProxyModel):
@@ -148,7 +319,7 @@ class AIStudioDialog(QDialog):
         # --- File Tree ---
         self.file_tree = QTreeView()
         self.file_tree.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
-        self.file_model = QFileSystemModel()
+        self.file_model = CheckableFileSystemModel()
         self.file_model.setRootPath("")
         self.proxy_model = DirectoryFilterProxyModel()
         self.proxy_model.setSourceModel(self.file_model)
@@ -171,7 +342,7 @@ class AIStudioDialog(QDialog):
         invert_selection_btn.clicked.connect(self._invert_selection)
         expand_all_btn.clicked.connect(self._expand_all)
         collapse_all_btn.clicked.connect(self._collapse_all)
-        self.file_tree.selectionModel().selectionChanged.connect(self._update_selection_info)
+        self.file_model.checkStateChanged.connect(self._update_selection_info)
 
         return widget
 
@@ -288,23 +459,21 @@ class AIStudioDialog(QDialog):
             self.project_root = path
             self.token_cache = TokenCache(path)
             source_index = self.file_model.setRootPath(path)
+            self.file_model.clear_checks()
             proxy_index = self.proxy_model.mapFromSource(source_index)
             self.file_tree.setRootIndex(proxy_index)
         else:
             self.project_root = None
             self.token_cache = None
             self.file_model.setRootPath("")
+            self.file_model.clear_checks()
             self.status_bar.showMessage("Please select a valid project.")
         self._update_ui_state()
 
     def _get_selected_file_paths(self) -> List[str]:
-        paths = []
-        for index in self.file_tree.selectionModel().selectedIndexes():
-            if index.column() == 0:
-                source_index = self.proxy_model.mapToSource(index)
-                if not self.file_model.isDir(source_index):
-                    paths.append(self.file_model.filePath(source_index))
-        return list(set(paths)) # Return unique paths
+        if not self.project_root:
+            return []
+        return self.file_model.get_checked_files()
 
     def _update_selection_info(self):
         selected_files = self._get_selected_file_paths()
@@ -332,31 +501,58 @@ class AIStudioDialog(QDialog):
         self.file_tree.collapseAll()
 
     def _select_all(self):
+        if not self.project_root:
+            return
         self.file_tree.expandAll()
+        self.file_model.set_all_under_path(self.project_root, Qt.CheckState.Checked)
         self.file_tree.selectAll()
 
     def _deselect_all(self):
+        if not self.project_root:
+            return
+        self.file_model.set_all_under_path(self.project_root, Qt.CheckState.Unchecked)
         self.file_tree.clearSelection()
 
     def _invert_selection(self):
+        if not self.project_root:
+            return
+
         self.file_tree.expandAll()
-        selection_model = self.file_tree.selectionModel()
-        model = self.proxy_model
-        
-        all_indexes = []
-        def recurse(parent):
-            for row in range(model.rowCount(parent)):
-                index = model.index(row, 0, parent)
-                all_indexes.append(index)
-                if model.hasChildren(index):
-                     recurse(index)
-        
+
+        to_toggle: List[str] = []
+
+        def recurse(parent_index: QModelIndex):
+            for row in range(self.proxy_model.rowCount(parent_index)):
+                proxy_index = self.proxy_model.index(row, 0, parent_index)
+                source_index = self.proxy_model.mapToSource(proxy_index)
+                if not source_index.isValid():
+                    continue
+                if self.file_model.isDir(source_index):
+                    recurse(proxy_index)
+                else:
+                    to_toggle.append(self.file_model.filePath(source_index))
+
         recurse(self.file_tree.rootIndex())
-        
-        for index in all_indexes:
-            source_index = model.mapToSource(index)
-            if not self.file_model.isDir(source_index):
-                selection_model.select(index, QItemSelectionModel.SelectionFlag.Toggle)
+
+        if not to_toggle:
+            return
+
+        changed = False
+        for path in to_toggle:
+            current_index = self.file_model.index(path)
+            current_state = self.file_model.get_check_state(current_index)
+            new_state = (
+                Qt.CheckState.Unchecked
+                if current_state == Qt.CheckState.Checked
+                else Qt.CheckState.Checked
+            )
+            changed = (
+                self.file_model.set_path_state(path, new_state, emit_signal=False)
+                or changed
+            )
+
+        if changed:
+            self.file_model.checkStateChanged.emit()
 
     def _apply_persona_selection(self):
         persona_id = self.persona_selector.currentData()
@@ -369,25 +565,40 @@ class AIStudioDialog(QDialog):
             return
 
         self.file_tree.expandAll()
-        self.file_tree.clearSelection()
+        self.file_model.set_all_under_path(self.project_root, Qt.CheckState.Unchecked)
         QApplication.processEvents() # Allow UI to update
-        
+
         selection_model = self.file_tree.selectionModel()
-        
+        selection_model.clearSelection()
+
         first_index = None
+        changed = False
         for file_path in recommended_files:
+            changed = (
+                self.file_model.set_path_state(
+                    file_path, Qt.CheckState.Checked, emit_signal=False
+                )
+                or changed
+            )
             source_index = self.file_model.index(file_path)
             if source_index.isValid():
                 proxy_index = self.proxy_model.mapFromSource(source_index)
                 if proxy_index.isValid():
                     if first_index is None:
                         first_index = proxy_index
-                    selection_model.select(proxy_index, QItemSelectionModel.SelectionFlag.Select | QItemSelectionModel.SelectionFlag.Rows)
-        
+                    selection_model.select(
+                        proxy_index,
+                        QItemSelectionModel.SelectionFlag.Select
+                        | QItemSelectionModel.SelectionFlag.Rows,
+                    )
+
+        if changed:
+            self.file_model.checkStateChanged.emit()
+
         if first_index:
             self.file_tree.scrollTo(first_index, QAbstractItemView.ScrollHint.PositionAtTop)
-        
-        
+
+
         log.info(f"Applied file selection for persona '{persona_id}'.")
 
 
