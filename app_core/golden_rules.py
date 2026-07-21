@@ -75,6 +75,54 @@ def get_golden_rules_text() -> str:
         return ""
     return "\n".join(f"{i+1}. {rule}" for i, rule in enumerate(rules))
 
+
+def get_rules_markdown() -> str:
+    """Return golden rules as a markdown block for inclusion in LLM prompts/exports."""
+    rules = get_golden_rules()
+    if not rules:
+        rules = _get_default_patcher_rules()["rules"]
+    lines = [
+        "## Golden Rules (output format — required)",
+        "",
+    ]
+    for i, rule in enumerate(rules, start=1):
+        lines.append(f"{i}. {rule}")
+    lines.extend([
+        "",
+        "### Output examples",
+        "",
+        "Create or overwrite a file (full contents):",
+        "",
+        "    ### File: `/path/to/file.py`",
+        "    ```python",
+        "    # full file contents here",
+        "    ```",
+        "",
+        "Apply a unified diff (preferred for small edits):",
+        "",
+        "    ```patch",
+        "    --- a/path/to/file.py",
+        "    +++ b/path/to/file.py",
+        "    @@ -1,3 +1,3 @@",
+        "     context",
+        "    -old line",
+        "    +new line",
+        "     context",
+        "    ```",
+        "",
+        "Delete a file:",
+        "",
+        "    ### File: `/path/to/obsolete.py`",
+        "    ---DELETED---",
+        "",
+        "Move/rename a file:",
+        "",
+        "    ### File: `/old/path.py`",
+        "    ---MOVED-TO: /new/path.py---",
+        "",
+    ])
+    return "\n".join(lines)
+
 def save_golden_rules_from_text(text: str) -> bool:
     """
     Parses a numbered or un-numbered text block and saves the rules.

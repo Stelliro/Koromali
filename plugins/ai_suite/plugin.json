@@ -2,7 +2,8 @@
     "id": "ai_suite",
     "name": "AI Suite",
     "author": "Koromali Team",
-    "version": "2.3.0",
-    "description": "A unified suite for AI-assisted development, including context export, response parsing, and interactive patching.",
+    "version": "2.4.0",
+    "description": "Export project context to Markdown for browser LLMs, parse responses, and apply full-file writes or unified-diff patches.",
+    "tags": ["ai", "export", "patch", "llm", "markdown"],
     "entry_point": "plugin_main.py"
 }

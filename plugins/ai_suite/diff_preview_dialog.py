@@ -75,10 +75,10 @@ class DiffPreviewDialog(QDialog):
     def _apply_changes(self):
         """Applies the patch to the actual file."""
         try:
-            # Create directory if it doesn't exist (for new files)
-            if not os.path.exists(os.path.dirname(self.file_path)):
-                os.makedirs(os.path.dirname(self.file_path), exist_ok=True)
-            
+            parent = os.path.dirname(self.file_path)
+            if parent:
+                os.makedirs(parent, exist_ok=True)
+
             with open(self.file_path, "w", encoding="utf-8", newline='\n') as f:
                 f.write(self.new_content)
             log.info(f"Successfully patched file: {self.file_path}")

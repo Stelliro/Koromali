@@ -1,146 +1,156 @@
 [
     {
-        "id": "find_replace",
-        "name": "Find/Replace",
+        "id": "ai_suite",
+        "name": "AI Suite",
         "author": "Koromali Team",
-        "version": "1.1.1",
-        "description": "Adds a Find/Replace dialog (Ctrl+F).",
-        "download_url": "https://raw.githubusercontent.com/<your-org>/Koromali/main/zips/find_replace.zip"
-    },
-    {
-        "id": "linter_ui",
-        "name": "Linter UI",
-        "author": "Koromali Team",
-        "version": "1.1.1",
-        "description": "Provides the 'Problems' panel to display linter results from Flake8.",
-        "download_url": "https://raw.githubusercontent.com/<your-org>/Koromali/main/zips/linter_ui.zip"
-    },
-    {
-        "id": "python_runner",
-        "name": "Python Runner",
-        "author": "Koromali Team",
-        "version": "1.1.1",
-        "description": "Adds functionality to run Python scripts (F5).",
-        "download_url": "https://raw.githubusercontent.com/<your-org>/Koromali/main/zips/python_runner.zip"
-    },
-    {
-        "id": "source_control_ui",
-        "name": "Source Control UI",
-        "author": "Koromali Team",
-        "version": "1.1.1",
-        "description": "Provides the 'Source Control' panel to view Git status.",
-        "download_url": "https://raw.githubusercontent.com/<your-org>/Koromali/main/zips/source_control_ui.zip"
+        "version": "2.4.0",
+        "description": "Context export to Markdown for browser LLMs, response parsing, and interactive patch apply.",
+        "tags": [
+            "ai",
+            "export",
+            "patch",
+            "llm",
+            "markdown"
+        ],
+        "download_url": ""
     },
     {
         "id": "ai_export_viewer",
         "name": "AI Export Viewer",
         "author": "Koromali Team",
         "version": "1.1.0",
-        "description": "Provides a tab-based viewer to manage and review past AI project exports.",
-        "download_url": "https://raw.githubusercontent.com/<your-org>/Koromali/main/zips/ai_export_viewer.zip"
-    },
-    {
-        "id": "ai_suite",
-        "name": "AI Suite",
-        "author": "Koromali Team",
-        "version": "2.0.0",
-        "description": "A unified suite for AI-assisted development, including context export, response parsing, and interactive patching.",
-        "download_url": "https://raw.githubusercontent.com/<your-org>/Koromali/main/zips/ai_suite.zip"
+        "description": "Browse and restore past AI project exports.",
+        "tags": [
+            "ai",
+            "export",
+            "history"
+        ],
+        "download_url": ""
     },
     {
         "id": "ai_quick_actions",
         "name": "AI Quick Actions",
         "author": "Koromali Team",
         "version": "1.0.0",
-        "description": "Adds AI-powered actions like 'Explain' and 'Refactor' to the editor's context menu.",
-        "download_url": "https://raw.githubusercontent.com/<your-org>/Koromali/main/zips/ai_quick_actions.zip"
+        "description": "Editor context-menu actions for explain/refactor style AI prompts.",
+        "tags": [
+            "ai",
+            "editor"
+        ],
+        "download_url": ""
     },
     {
         "id": "api_keys_manager",
         "name": "API Keys Manager",
         "author": "Koromali Team",
         "version": "1.0.0",
-        "description": "Provides a secure settings page for managing API provider keys.",
-        "download_url": "https://raw.githubusercontent.com/<your-org>/Koromali/main/zips/api_keys_manager.zip"
+        "description": "Settings page for provider API keys.",
+        "tags": [
+            "settings",
+            "security",
+            "api"
+        ],
+        "download_url": ""
     },
     {
         "id": "github_tools",
         "name": "GitHub Tools",
         "author": "Koromali Team",
         "version": "1.2.0",
-        "description": "Provides UI for cloning, releases, and other GitHub interactions.",
-        "download_url": "https://raw.githubusercontent.com/<your-org>/Koromali/main/zips/github_tools.zip"
+        "description": "Clone, release, and GitHub workflow helpers.",
+        "tags": [
+            "git",
+            "github",
+            "vcs"
+        ],
+        "download_url": ""
     },
     {
         "id": "markdown_viewer",
         "name": "Markdown Viewer",
-        "author": "AI Assistant",
+        "author": "Koromali Team",
         "version": "1.0.2",
-        "description": "Adds support for viewing rendered Markdown (.md) files in a separate tab. It intercepts file open calls to provide a rich text view instead of a plain text editor for .md files.",
-        "download_url": "https://raw.githubusercontent.com/<your-org>/Koromali/main/zips/markdown_viewer.zip"
+        "description": "Rendered Markdown preview tabs for .md files.",
+        "tags": [
+            "markdown",
+            "preview"
+        ],
+        "download_url": ""
     },
     {
-        "id": "plugin_publisher",
-        "name": "Plugin Publisher",
-        "author": "AI Assistant",
-        "version": "1.0.1",
-        "description": "Provides a tool to package and publish installed plugins to a specified GitHub distribution repository. Manages versioning and updates the repository's indexx.json.",
-        "download_url": "https://raw.githubusercontent.com/<your-org>/Koromali/main/zips/plugin_publisher.zip"
+        "id": "terminal",
+        "name": "Terminal",
+        "author": "Koromali Team",
+        "version": "1.0.0",
+        "description": "Integrated terminal panel for the workspace.",
+        "tags": [
+            "terminal",
+            "shell"
+        ],
+        "download_url": ""
+    },
+    {
+        "id": "project_search",
+        "name": "Project Search",
+        "author": "Koromali Team",
+        "version": "1.0.0",
+        "description": "Project-wide text search with results panel.",
+        "tags": [
+            "search",
+            "navigation"
+        ],
+        "download_url": ""
+    },
+    {
+        "id": "theme_editor",
+        "name": "Theme Editor",
+        "author": "Koromali Team",
+        "version": "1.0.0",
+        "description": "Visual editor for custom color themes.",
+        "tags": [
+            "theme",
+            "ui",
+            "customization"
+        ],
+        "download_url": ""
     },
     {
         "id": "script_runner",
         "name": "Script Runner",
         "author": "Koromali Team",
-        "version": "1.2.0",
-        "description": "Adds functionality to run Python, C++, C#, and JavaScript files from the editor.",
-        "download_url": "https://raw.githubusercontent.com/<your-org>/Koromali/main/zips/script_runner.zip"
+        "version": "1.3.0",
+        "description": "Run Python/JS/C/C++/C# from the editor, plus per-project launch scripts (Shift+F5).",
+        "tags": [
+            "run",
+            "python",
+            "tools",
+            "launch"
+        ],
+        "download_url": ""
     },
     {
-        "id": "terminal",
-        "name": "Integrated Terminal",
+        "id": "live_share_studio",
+        "name": "Live Share Studio",
         "author": "Koromali Team",
         "version": "1.0.0",
-        "description": "Provides a dockable, theme-aware terminal that runs a native shell within the editor.",
-        "download_url": "https://raw.githubusercontent.com/<your-org>/Koromali/main/zips/terminal.zip"
+        "description": "Real-time collaboration sessions over websockets.",
+        "tags": [
+            "collaboration",
+            "network"
+        ],
+        "download_url": ""
     },
     {
-        "id": "theme_editor",
-        "name": "Theme Editor",
-        "author": "Koromali",
+        "id": "installer_builder",
+        "name": "Installer Builder",
+        "author": "Koromali Team",
         "version": "1.0.0",
-        "description": "A graphical editor for creating and modifying UI themes.",
-        "download_url": "https://raw.githubusercontent.com/<your-org>/Koromali/main/zips/theme_editor.zip"
-    },
-    {
-        "id": "debug_framework",
-        "name": "Debug Tools Framework",
-        "author": "AI Assistant",
-        "version": "1.0.0",
-        "description": "Provides a core framework and UI for debugging plugins. Other debug tools can register themselves with this framework.",
-        "download_url": "https://raw.githubusercontent.com/<your-org>/Koromali/main/zips/debug_framework.zip"
-    },
-    {
-        "id": "enhanced_exceptions",
-        "name": "Enhanced Exception Reporter",
-        "author": "AI Assistant",
-        "version": "1.0.0",
-        "description": "Replaces the default crash handler with a developer-friendly dialog showing a detailed traceback.",
-        "download_url": "https://raw.githubusercontent.com/<your-org>/Koromali/main/zips/enhanced_exceptions.zip"
-    },
-    {
-        "id": "live_log_viewer",
-        "name": "Live Log Viewer",
-        "author": "AI Assistant",
-        "version": "1.0.0",
-        "description": "Adds a tool to launch a separate, real-time log viewer application that persists across application restarts.",
-        "download_url": "https://raw.githubusercontent.com/<your-org>/Koromali/main/zips/live_log_viewer.zip"
-    },
-    {
-        "id": "plugin_initializer",
-        "name": "Plugin Initializer",
-        "author": "Koromali AI",
-        "version": "1.0.0",
-        "description": "A developer tool to quickly scaffold new plugins for Koromali.",
-        "download_url": "https://raw.githubusercontent.com/<your-org>/Koromali/main/zips/plugin_initializer.zip"
+        "description": "Markdown-driven Windows installer packaging helper.",
+        "tags": [
+            "packaging",
+            "windows",
+            "installer"
+        ],
+        "download_url": ""
     }
 ]

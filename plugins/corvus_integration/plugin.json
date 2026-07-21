@@ -2,7 +2,9 @@
     "id": "corvus_integration",
     "name": "Corvus Integration",
     "author": "Koromali Team",
-    "version": "1.0.0",
-    "description": "Provides a chat interface to interact with the local Corvus assistant.",
+    "version": "1.0.1",
+    "description": "Optional chat panel for a local Corvus assistant (requires the corvus_app package).",
+    "tags": ["ai", "chat", "optional"],
+    "optional_dependencies": ["corvus_app"],
     "entry_point": "plugin_main.py"
 }

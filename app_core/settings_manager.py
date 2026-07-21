@@ -12,7 +12,7 @@ CREDENTIALS_FILE = os.path.join(APP_DATA_ROOT, "credentials.json")
 
 DEFAULT_SETTINGS = {
     "window_size": [1600, 1000], "window_position": None, "splitter_sizes": [300, 1300],
-    "last_theme_id": "Koromali_dark", "font_family": "Consolas", "font_size": 11,
+    "last_theme_id": "Koromali_modern_dark", "font_family": "Consolas", "font_size": 11,
     "show_line_numbers": True, "show_indentation_guides": True, "word_wrap": False,
     "indent_style": "spaces", "indent_width": 4, "auto_save_enabled": False,
     "auto_save_delay_seconds": 3, "max_recent_files": 15, "favorites": [],
@@ -25,7 +25,10 @@ DEFAULT_SETTINGS = {
     "ai_export_golden_rules": {}, "cleanup_after_build": True, "nsis_path": "",
     "ai_tools_api_mode_enabled": False, "ai_tools_include_linter": True,
     "ai_studio_use_persona": True, "ai_studio_include_patcher_rules": True,
-    "ai_studio_selections": {}
+    "ai_studio_selections": {},
+    "project_launch_scripts": {},
+    "ai_default_model": "",
+    "ai_api_keys": {},
 }
 DEFAULT_CREDENTIALS = {
     "github_access_token": None, "github_user": None, "github_user_info": None, "api_keys": {}

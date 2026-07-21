@@ -2,7 +2,8 @@
     "id": "script_runner",
     "name": "Script Runner",
     "author": "Koromali Team",
-    "version": "1.2.0",
-    "description": "Adds functionality to run Python, C++, C#, and JavaScript files from the editor.",
+    "version": "1.3.0",
+    "description": "Run Python/JS/C/C++/C# from the editor, plus per-project launch scripts (Shift+F5).",
+    "tags": ["run", "python", "tools", "launch"],
     "entry_point": "plugin_main.py"
 }

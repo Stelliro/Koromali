@@ -162,11 +162,16 @@ class FindPanel(QFrame):
 
     def _update_button_states(self):
         has_text = bool(self.find_input.text())
-        is_project_open = self.editor and self.editor.koromali_api.get_manager("project").is_project_open()
-        
+        project_manager = None
+        if self.editor and getattr(self.editor, "koromali_api", None):
+            project_manager = self.editor.koromali_api.get_manager("project")
+        is_project_open = bool(
+            project_manager and getattr(project_manager, "is_project_open", lambda: False)()
+        )
+
         self.find_next_button.setEnabled(has_text)
         self.find_prev_button.setEnabled(has_text)
-        self.find_all_button.setEnabled(has_text and is_project_open)
+        self.find_all_button.setEnabled(bool(has_text and is_project_open))
         self.replace_button.setEnabled(has_text)
         self.replace_all_button.setEnabled(has_text)
 

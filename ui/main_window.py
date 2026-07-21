@@ -4,7 +4,6 @@ import sys
 import re
 from functools import partial
 from typing import Optional, List, cast, Dict
-
 from PyQt6.QtCore import (Qt, pyqtSignal, QTimer, QSize, QUrl, QObject, QRunnable, QThreadPool, QEvent, QPoint,
                           QPropertyAnimation, QEasingCurve, QRect, QByteArray)
 from PyQt6.QtGui import (QKeySequence, QAction, QCloseEvent, QDesktopServices, QIcon, QActionGroup, QDragEnterEvent,
@@ -1013,18 +1012,30 @@ class MainWindow(QMainWindow):
 
     def _close_all_tabs_for_project_switch(self):
         self.tab_widget.blockSignals(True)
-        while self.tab_widget.count() > 0:
-            widget = self.tab_widget.widget(0); self.tab_widget.removeTab(0)
-            if widget in self.editor_tabs_data: del self.editor_tabs_data[widget]
-            widget.deleteLater()
-        self.tab_widget.blockSignals(False); self._add_new_tab(is_placeholder=True)
+        # Collect widgets to delete first
+        widgets_to_delete = [self.tab_widget.widget(i) for i in range(self.tab_widget.count())]
+        # Clear the tab widget UI, which detaches the widgets
+        self.tab_widget.clear()
+        # Safely delete the detached widgets and clear our tracking data
+        for widget in widgets_to_delete:
+            if widget:
+                widget.deleteLater()
+        self.editor_tabs_data.clear()
+        self.tab_widget.blockSignals(False)
+        # Add the placeholder tab back
+        self._add_new_tab(is_placeholder=True)
 
     def _on_project_list_or_active_changed(self):
         new_active_project = self.project_manager.get_active_project_path()
         if self.last_active_project_path != new_active_project:
             log.info(f"Active project changed from '{self.last_active_project_path}' to '{new_active_project}'")
-            self._save_current_project_session(); self._close_all_tabs_for_project_switch(); self._load_project_session(new_active_project)
+            self._save_current_project_session()
+            self._close_all_tabs_for_project_switch()
+            self._load_project_session(new_active_project)
             self.last_active_project_path = new_active_project
+        # Also refresh the explorer to update its active state visuals
+        if hasattr(self, 'explorer_panel'):
+            self.explorer_panel.refresh()
 
     def closeEvent(self, e: QCloseEvent):
         if self._is_app_closing: e.accept(); return

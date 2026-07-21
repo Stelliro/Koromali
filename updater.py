@@ -33,8 +33,13 @@ def _copy_protected_items(install_dir: str, source_dir: str):
         if os.path.exists(src_path):
             try:
                 # Ensure the destination directory exists before copying.
-                os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+                parent = os.path.dirname(dest_path)
+                if parent:
+                    os.makedirs(parent, exist_ok=True)
                 if os.path.isdir(src_path):
+                    if os.path.exists(dest_path):
+                        # Replace existing protected dirs cleanly when re-running updates.
+                        shutil.rmtree(dest_path, ignore_errors=True)
                     shutil.copytree(src_path, dest_path, dirs_exist_ok=True)
                 else:
                     shutil.copy2(src_path, dest_path)

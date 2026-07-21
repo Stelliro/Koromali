@@ -1,66 +1,97 @@
-# Byte-compiled / optimized / DLL files
+# --- Python ---
 __pycache__/
 *.py[cod]
 *$py.class
-
-# C extensions
 *.so
-
-# Distribution / packaging
 .Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
 *.egg
-MANIFEST
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
 
-# PyInstaller
-#  Usually these files are written by a CI, but we want to ignore them if we build locally
-*.spec
-
-# Installer files
-/dist/*.exe
-/dist/*.zip
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# Virtual Environments
+# --- Virtual envs ---
 .env
-.venv
+.env.*
+.venv/
 venv/
 ENV/
 env/
 env.bak/
 venv.bak/
 
-# IDE settings
-.idea/
-.vscode/
-.koromali/
+# --- Build / packaging ---
+build/
+dist/
+downloads/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+.installed.cfg
+MANIFEST
+*.manifest
+*.spec
 
-# macOS
-.DS_Store
-
-# Project-specific ignores
-# Settings file (contains sensitive info like tokens)
-Koromali_editor_settings.json
-# Application logs
-/app.log
-/logs/
-# Update artifacts
+# Installer / release artifacts
 /update.zip
 /update_temp/
-/ai_exports
+*.exe
+*.msi
+*.zip
+!docs/**/*.png
+
+# --- IDE / editors ---
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# --- OS junk ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Koromali runtime / local state ---
+.koromali/
+.grok/
+session_data/
+logs/
+*.log
+/app.log
+projects/*
+!projects/.gitkeep
+
+# User settings & secrets (never commit)
+Koromali_editor_settings.json
+credentials.json
+*.pem
+*.key
+
+# Local theme/color overrides (canonical defaults live under assets/themes/)
+/custom_themes.json
+/icon_colors.json
+
+# AI exports produced by the app
+/ai_exports/
+ai_exports/
+
+# UI smoke screenshots (generated)
+tests/_smoke_artifacts/
+
+# Local agent / scratch
+hotfix/
+*.tmp
+*.bak
+*.orig
+
+# Jupyter
+.ipynb_checkpoints/

@@ -115,6 +115,9 @@ def main():
     sys.excepthook = fallback_excepthook
 
     try:
+        from utils.qt_compat import ensure_qt_binding
+        ensure_qt_binding()
+
         # Move all critical imports inside this block.
         # If any of these fail, it indicates a fundamental issue.
         from PyQt6.QtWidgets import QApplication, QMessageBox
@@ -192,11 +195,19 @@ def main():
 if __name__ == '__main__':
     # Initial check for PyQt6, as it's needed to even show an error dialog.
     try:
+        from utils.qt_compat import ensure_qt_binding
+        ensure_qt_binding()
         from PyQt6.QtWidgets import QApplication
     except ImportError:
         # A simple console print for the most basic failure case.
-        print("FATAL ERROR: PyQt6 is not installed or could not be imported.", file=sys.stderr)
-        print("Please ensure it is installed correctly: pip install PyQt6", file=sys.stderr)
+        print(
+            "FATAL ERROR: PyQt6 or PySide6 is not installed or could not be imported.",
+            file=sys.stderr,
+        )
+        print(
+            "Please ensure a supported Qt binding is installed: pip install PyQt6 or pip install PySide6",
+            file=sys.stderr,
+        )
         sys.exit(1)
     
     main()

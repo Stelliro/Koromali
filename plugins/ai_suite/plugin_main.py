@@ -4,8 +4,8 @@ from functools import partial
 from typing import List
 from datetime import datetime
 
-from PyQt6.QtWidgets import QMenu, QApplication, QMessageBox
-from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QMenu, QApplication, QMessageBox, QInputDialog
+from PyQt6.QtCore import Qt, QTimer
 
 try:
     import qtawesome as qta
@@ -19,7 +19,6 @@ from .ai_studio_dialog import AIStudioDialog
 from .new_ai_project_dialog import NewAIProjectDialog
 from .persona_manager_dialog import PersonaManagerDialog
 from utils.logger import log
-from utils.helpers import clean_git_conflict_markers, get_base_path
 
 
 class AISuitePlugin:
@@ -57,12 +56,6 @@ class AISuitePlugin:
                 icon_name="fa5s.magic",
                 insert_before=new_project_action
             )
-
-        if not hasattr(self.main_window, 'ai_suite_menu'):
-            tools = self.api.get_menu("tools")
-            if tools:
-                self.main_window.ai_suite_menu = QMenu("AI Suite", tools)
-                tools.addMenu(self.main_window.ai_suite_menu)
 
     def show_studio_dialog(self):
         """Shows the AI Studio, creating it if necessary."""
