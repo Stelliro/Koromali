@@ -24,9 +24,7 @@
 !define MUI_ABORTWARNING
 !define MUI_ICON "${INSTALLER_ICON}"
 !define MUI_UNICON "${INSTALLER_ICON}"
-!define MUI_HEADERIMAGE
-!define MUI_HEADERIMAGE_BITMAP "${ASSETS_DIR}/header.bmp"
-!define MUI_WELCOMEFINISHPAGE_BITMAP "${ASSETS_DIR}/welcome.bmp"
+; Optional side/header bitmaps omitted for CI reliability (icon is enough).
 !define MUI_FINISHPAGE_RUN "$INSTDIR\${MAIN_EXE}"
 
 ;================================
