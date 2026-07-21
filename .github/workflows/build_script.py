@@ -126,12 +126,13 @@ def generate_nsi_script(version, source_dir):
     descriptions = ['!insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN']
     
     # Core Application Section
-    src = nsis_path(source_dir)
+    # NSIS File /r on Windows is more reliable with backslash paths.
+    src_win = str(Path(source_dir).resolve())
     sections.append(
         'Section "Core Application" SEC_CORE\n'
         '  SectionIn RO\n'
         '  SetOutPath "$INSTDIR"\n'
-        f'  File /r "{src}/*.*"\n'
+        f'  File /r "{src_win}\\*.*"\n'
         '  WriteUninstaller "$INSTDIR\\uninstall.exe"\n'
         '  CreateShortCut "$DESKTOP\\${APP_NAME}.lnk" "$INSTDIR\\${MAIN_EXE}"\n'
         '  CreateDirectory "$SMPROGRAMS\\${APP_NAME}"\n'
@@ -203,8 +204,9 @@ def generate_nsi_script(version, source_dir):
     )
 
     # --- Combine and write script ---
+    # Sections must appear before MUI description macros that reference section IDs.
     # Defines are passed on the makensis command line (/D), not injected here.
-    generated_content = "\n".join(descriptions + sections)
+    generated_content = "\n".join(sections + descriptions)
     generated_functions = "\n".join(functions)
 
     final_script = template.replace('!GENERATED_CONTENT_GOES_HERE!', generated_content)
