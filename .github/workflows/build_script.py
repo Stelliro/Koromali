@@ -21,6 +21,38 @@ def log(message):
     print(f"--- {message}")
 
 
+def nsis_path(path) -> str:
+    """Return an absolute path safe for NSIS string literals (forward slashes)."""
+    return str(Path(path).resolve()).replace("\\", "/")
+
+
+def ensure_installer_bitmaps():
+    """Create simple BMP side/header images if missing (NSIS MUI expects them)."""
+    try:
+        from PIL import Image, ImageDraw
+    except ImportError:
+        log("Pillow not available; will skip custom installer bitmaps if missing.")
+        return
+
+    header = ASSETS_DIR / "header.bmp"
+    welcome = ASSETS_DIR / "welcome.bmp"
+
+    def _make(path: Path, size: tuple[int, int], accent=(108, 158, 248)):
+        img = Image.new("RGB", size, (30, 31, 36))
+        d = ImageDraw.Draw(img)
+        d.rectangle([0, 0, size[0], 8], fill=accent)
+        d.rectangle([0, 0, 8, size[1]], fill=accent)
+        img.save(path, format="BMP")
+        log(f"Created installer bitmap: {path}")
+
+    if not header.exists():
+        # Classic MUI header size
+        _make(header, (150, 57))
+    if not welcome.exists():
+        # Classic MUI welcome/finish side bitmap
+        _make(welcome, (164, 314))
+
+
 def prepare_source_directory():
     """Copies all necessary built files into a clean source directory for the installer."""
     log("Preparing files for installer...")
@@ -67,17 +99,23 @@ def generate_nsi_script(version, source_dir):
     with open(TEMPLATE_NSI_PATH, 'r', encoding='utf-8') as f:
         template = f.read()
 
-    # --- NSIS Defines ---
+    ensure_installer_bitmaps()
+
+    icon_path = ASSETS_DIR / "koromali.ico"
+    if not icon_path.is_file():
+        raise FileNotFoundError(f"Installer icon missing: {icon_path}")
+
+    # --- NSIS Defines (always use forward-slash paths) ---
     defines_list = [
         f'!define APP_NAME "{APP_NAME}"',
         f'!define APP_VERSION "{version}"',
         f'!define APP_AUTHOR "{ORG_NAME}"',
         f'!define MAIN_EXE "{MAIN_EXE}"',
-        f'!define OUT_FILE "{DIST_DIR / f"{APP_NAME}_{version}_Setup.exe"}"',
-        f'!define ASSETS_DIR "{ASSETS_DIR}"',
-        f'!define INSTALLER_ICON "{ASSETS_DIR / "koromali.ico"}"',
-        f'!define LICENSE_FILE "{ROOT_DIR / "LICENSE.md"}"',
-        f'!define BUILD_SOURCE_DIR "{source_dir}"'
+        f'!define OUT_FILE "{nsis_path(DIST_DIR / f"{APP_NAME}_{version}_Setup.exe")}"',
+        f'!define ASSETS_DIR "{nsis_path(ASSETS_DIR)}"',
+        f'!define INSTALLER_ICON "{nsis_path(icon_path)}"',
+        f'!define LICENSE_FILE "{nsis_path(ROOT_DIR / "LICENSE")}"',
+        f'!define BUILD_SOURCE_DIR "{nsis_path(source_dir)}"',
     ]
 
     # --- Section and Function Definitions ---
@@ -86,11 +124,12 @@ def generate_nsi_script(version, source_dir):
     descriptions = ['!insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN']
     
     # Core Application Section
+    src = nsis_path(source_dir)
     sections.append(
         'Section "Core Application" SEC_CORE\n'
         '  SectionIn RO\n'
         '  SetOutPath "$INSTDIR"\n'
-        f'  File /r "{source_dir.resolve()}\\*.*"\n'
+        f'  File /r "{src}/*.*"\n'
         '  WriteUninstaller "$INSTDIR\\uninstall.exe"\n'
         '  CreateShortCut "$DESKTOP\\${APP_NAME}.lnk" "$INSTDIR\\${MAIN_EXE}"\n'
         '  CreateDirectory "$SMPROGRAMS\\${APP_NAME}"\n'

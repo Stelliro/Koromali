@@ -19,10 +19,9 @@
 !define MUI_ICON "${INSTALLER_ICON}"
 !define MUI_UNICON "${INSTALLER_ICON}"
 !define MUI_HEADERIMAGE
-!define MUI_HEADERIMAGE_BITMAP "${ASSETS_DIR}\header.bmp"
-!define MUI_WELCOMEFINISHPAGE_BITMAP "${ASSETS_DIR}\welcome.bmp"
+!define MUI_HEADERIMAGE_BITMAP "${ASSETS_DIR}/header.bmp"
+!define MUI_WELCOMEFINISHPAGE_BITMAP "${ASSETS_DIR}/welcome.bmp"
 !define MUI_FINISHPAGE_RUN "$INSTDIR\${MAIN_EXE}"
-!define MUI_FINISHPAGE_FUNCTION "FinishPagePrompt"
 
 ;================================
 ;==        PAGE SETUP          ==
