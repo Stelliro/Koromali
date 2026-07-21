@@ -93,30 +93,32 @@ def prepare_source_directory():
     return source_dir
 
 
+def build_nsis_defines(version, source_dir) -> list[str]:
+    """Return makensis /D flags. Paths use forward slashes for NSIS."""
+    ensure_installer_bitmaps()
+    icon_path = ASSETS_DIR / "koromali.ico"
+    if not icon_path.is_file():
+        raise FileNotFoundError(f"Installer icon missing: {icon_path}")
+
+    # Values only — compile_installer prefixes each with /D
+    return [
+        f"APP_NAME={APP_NAME}",
+        f"APP_VERSION={version}",
+        f"APP_AUTHOR={ORG_NAME}",
+        f"MAIN_EXE={MAIN_EXE}",
+        f"OUT_FILE={nsis_path(DIST_DIR / f'{APP_NAME}_{version}_Setup.exe')}",
+        f"ASSETS_DIR={nsis_path(ASSETS_DIR)}",
+        f"INSTALLER_ICON={nsis_path(icon_path)}",
+        f"LICENSE_FILE={nsis_path(ROOT_DIR / 'LICENSE')}",
+        f"BUILD_SOURCE_DIR={nsis_path(source_dir)}",
+    ]
+
+
 def generate_nsi_script(version, source_dir):
     """Dynamically creates the NSIS script from the template."""
     log("Generating NSIS script...")
     with open(TEMPLATE_NSI_PATH, 'r', encoding='utf-8') as f:
         template = f.read()
-
-    ensure_installer_bitmaps()
-
-    icon_path = ASSETS_DIR / "koromali.ico"
-    if not icon_path.is_file():
-        raise FileNotFoundError(f"Installer icon missing: {icon_path}")
-
-    # --- NSIS Defines (always use forward-slash paths) ---
-    defines_list = [
-        f'!define APP_NAME "{APP_NAME}"',
-        f'!define APP_VERSION "{version}"',
-        f'!define APP_AUTHOR "{ORG_NAME}"',
-        f'!define MAIN_EXE "{MAIN_EXE}"',
-        f'!define OUT_FILE "{nsis_path(DIST_DIR / f"{APP_NAME}_{version}_Setup.exe")}"',
-        f'!define ASSETS_DIR "{nsis_path(ASSETS_DIR)}"',
-        f'!define INSTALLER_ICON "{nsis_path(icon_path)}"',
-        f'!define LICENSE_FILE "{nsis_path(ROOT_DIR / "LICENSE")}"',
-        f'!define BUILD_SOURCE_DIR "{nsis_path(source_dir)}"',
-    ]
 
     # --- Section and Function Definitions ---
     sections = []
@@ -201,9 +203,10 @@ def generate_nsi_script(version, source_dir):
     )
 
     # --- Combine and write script ---
-    generated_content = "\n".join(defines_list + descriptions + sections)
+    # Defines are passed on the makensis command line (/D), not injected here.
+    generated_content = "\n".join(descriptions + sections)
     generated_functions = "\n".join(functions)
-    
+
     final_script = template.replace('!GENERATED_CONTENT_GOES_HERE!', generated_content)
     final_script = final_script.replace('!GENERATED_FUNCTIONS_GOES_HERE!', generated_functions)
 
@@ -213,14 +216,22 @@ def generate_nsi_script(version, source_dir):
     return generated_nsi_path
 
 
-def compile_installer(nsi_script_path):
-    """Runs makensis.exe to compile the installer."""
+def compile_installer(nsi_script_path, define_flags: list[str]):
+    """Runs makensis.exe to compile the installer with /D defines."""
     log("Compiling installer with NSIS...")
+    cmd = ["makensis"]
+    for flag in define_flags:
+        cmd.append(f"/D{flag}")
+    cmd.append(str(nsi_script_path))
+    log(f"Running: {' '.join(cmd)}")
     try:
-        # Using subprocess.run for better error handling and output capture
         result = subprocess.run(
-            ["makensis", str(nsi_script_path)], 
-            check=True, capture_output=True, text=True, encoding='utf-8', errors='ignore'
+            cmd,
+            check=True,
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            errors='ignore',
         )
         log("Installer compiled successfully.")
         if result.stdout:
@@ -239,8 +250,9 @@ def main():
     args = parser.parse_args()
 
     source_dir = prepare_source_directory()
+    define_flags = build_nsis_defines(args.version, source_dir)
     nsi_path = generate_nsi_script(args.version, source_dir)
-    compile_installer(nsi_path)
+    compile_installer(nsi_path, define_flags)
     log("Build process complete.")
 
 

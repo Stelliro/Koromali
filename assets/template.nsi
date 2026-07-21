@@ -3,12 +3,18 @@
 
 ;================================
 ;==         DEFINES            ==
-; These are set by the build script via the /D flag
+; APP_NAME, APP_VERSION, APP_AUTHOR, MAIN_EXE, OUT_FILE, ASSETS_DIR,
+; INSTALLER_ICON, LICENSE_FILE, BUILD_SOURCE_DIR are passed via makensis /D
 ;================================
+!ifndef APP_NAME
+  !error "APP_NAME must be defined (pass /DAPP_NAME=... to makensis)"
+!endif
+!ifndef MAIN_EXE
+  !define MAIN_EXE "Koromali.exe"
+!endif
 !define PRODUCT_NAME "${APP_NAME}"
 !define PRODUCT_VERSION "${APP_VERSION}"
 !define PRODUCT_AUTHOR "${APP_AUTHOR}"
-!define MAIN_EXE "${MAIN_EXE}"
 !define PRODUCT_UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}"
 
 ;================================
