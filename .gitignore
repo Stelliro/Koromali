@@ -38,11 +38,17 @@ share/python-wheels/
 .installed.cfg
 MANIFEST
 *.manifest
+# Keep checked-in packaging specs; ignore local accidental specs
 *.spec
+!/main.spec
+!/tray_app.spec
+!/log_viewer.spec
 
 # Installer / release artifacts
 /update.zip
 /update_temp/
+/dist/
+/build/
 *.exe
 *.msi
 *.zip

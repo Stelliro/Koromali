@@ -3,8 +3,16 @@ name: Build and Release Installer
 on:
   push:
     tags:
-      - 'v*.*.*' # Trigger on tags like v1.0.0
-  workflow_dispatch: # Allow manual triggering
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g. 1.9.74) — used when not tagging'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -19,23 +27,33 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
 
-      - name: Install PyInstaller
-        run: pip install pyinstaller
+      - name: Install NSIS
+        uses: negrutiu/nsis-install@v2
 
-      - name: Set up NSIS
-        uses: joncampbell123/nsis-action@v2
-
-      - name: Extract version from tag
-        id: get_version
+      - name: Resolve version
+        id: version
         shell: bash
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          elif [[ -n "${{ github.event.inputs.version }}" ]]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="$(tr -d '[:space:]' < VERSION.txt)"
+          fi
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: ${VERSION}"
 
       - name: Update VERSION.txt
         shell: bash
-        run: echo "${{ env.VERSION }}" > VERSION.txt
+        run: echo "${VERSION}" > VERSION.txt
 
       - name: Build executables with PyInstaller
         run: |
@@ -45,23 +63,15 @@ jobs:
       - name: Create Installer with NSIS
         run: python .github/workflows/build_script.py --version ${{ env.VERSION }}
 
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create GitHub Release and upload installer
+        uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref }}
-          release_name: Release v${{ env.VERSION }}
+          tag_name: v${{ env.VERSION }}
+          name: Koromali v${{ env.VERSION }}
           draft: false
           prerelease: false
-
-      - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1
+          generate_release_notes: true
+          files: |
+            dist/Koromali_${{ env.VERSION }}_Setup.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./dist/Koromali_${{ env.VERSION }}_Setup.exe
-          asset_name: Koromali_v${{ env.VERSION }}_Setup.exe
-          asset_content_type: application/octet-stream
