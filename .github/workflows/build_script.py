@@ -29,19 +29,34 @@ def prepare_source_directory():
         shutil.rmtree(source_dir)
     source_dir.mkdir()
 
-    # Copy main app files from PyInstaller's output
+    # Copy main app files from PyInstaller's onedir output (preferred).
     main_app_dist = DIST_DIR / APP_NAME
-    if not main_app_dist.exists():
-        raise FileNotFoundError(f"Main app dist directory not found at '{main_app_dist}'")
-    shutil.copytree(main_app_dist, source_dir, dirs_exist_ok=True)
-    log(f"Copied main application from '{main_app_dist}'")
+    onefile_exe = DIST_DIR / MAIN_EXE
+    if main_app_dist.is_dir():
+        shutil.copytree(main_app_dist, source_dir, dirs_exist_ok=True)
+        log(f"Copied main application from '{main_app_dist}'")
+    elif onefile_exe.is_file():
+        # Fallback for one-file PyInstaller builds.
+        shutil.copy2(onefile_exe, source_dir / MAIN_EXE)
+        log(f"Copied one-file main executable from '{onefile_exe}'")
+    else:
+        raise FileNotFoundError(
+            f"Main app dist not found. Expected onedir '{main_app_dist}' "
+            f"or onefile '{onefile_exe}'. Dist contents: {list(DIST_DIR.glob('*'))}"
+        )
 
-    # Copy tray app
+    # Copy tray app (onedir or onefile)
     tray_app_dist = DIST_DIR / f"{APP_NAME}Tray"
     tray_exe_path = tray_app_dist / TRAY_EXE
-    if tray_exe_path.exists():
+    tray_onefile = DIST_DIR / TRAY_EXE
+    if tray_exe_path.is_file():
         shutil.copy2(tray_exe_path, source_dir / TRAY_EXE)
         log(f"Copied tray application from '{tray_app_dist}'")
+    elif tray_onefile.is_file():
+        shutil.copy2(tray_onefile, source_dir / TRAY_EXE)
+        log(f"Copied tray one-file executable from '{tray_onefile}'")
+    else:
+        log(f"Tray executable not found; installer will omit {TRAY_EXE}")
 
     return source_dir
 
