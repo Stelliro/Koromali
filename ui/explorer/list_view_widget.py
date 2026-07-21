@@ -782,6 +782,9 @@ class ProjectDock(QWidget):
 
 
 class FileSystemListView(QWidget):
+    # Plugins can connect to add items before the explorer context menu is shown.
+    context_menu_about_to_show = pyqtSignal(object, list)  # (QMenu, paths: List[str])
+
     DEFAULT_IGNORED_DIRS = {'.git', '__pycache__', 'venv', '.venv', 'node_modules', '.vscode', '.idea'}
 
     def __init__(self, koromali_api: KoromaliPluginAPI, parent: QWidget = None):
@@ -1526,6 +1529,12 @@ class FileSystemListView(QWidget):
             project_manager=self.project_manager,
             target_dir_for_paste=target_dir_for_paste
         )
+
+        # Allow plugins (AI Export Viewer, etc.) to append actions safely.
+        try:
+            self.context_menu_about_to_show.emit(menu, paths)
+        except Exception as e:
+            log.warning(f"Explorer context menu plugin hook failed: {e}")
 
         if menu.actions():
             menu.exec(global_pos)

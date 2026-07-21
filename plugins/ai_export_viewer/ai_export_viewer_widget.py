@@ -82,7 +82,7 @@ class AIExportViewerWidget(QWidget):
         right_pane.setLayout(right_layout)
         top_splitter.addWidget(right_pane)
 
-        guide_pane = QGroupBox("Project Export Viewer")
+        guide_pane = QGroupBox("Export Contents")
         guide_layout = QVBoxLayout(guide_pane)
         guide_toolbar_layout = QHBoxLayout()
         guide_toolbar_layout.addStretch()
@@ -160,6 +160,8 @@ class AIExportViewerWidget(QWidget):
         try:
             if os.path.isdir(self.export_dir):
                 for root, _, files in os.walk(self.export_dir):
+                    if "backups" in root.split(os.sep): # Exclude backups from viewer
+                        continue
                     for filename in files:
                         if filename.endswith('.md'):
                             path = os.path.join(root, filename)
@@ -191,7 +193,6 @@ class AIExportViewerWidget(QWidget):
         match = re.search(r"^(.*Timestamp: )(.+?)$", content, re.MULTILINE)
         if not match: return content
         original_line, prefix, iso_timestamp_str = match.group(0), match.group(1), match.group(2).strip()
-        iso_timestamp_str = iso_timestamp_str.strip('}", ')
         try:
             dt_object = datetime.fromisoformat(iso_timestamp_str)
             formatted_timestamp = dt_object.strftime("%I:%M:%S %p on %A, %B %d, %Y")
@@ -226,45 +227,44 @@ class AIExportViewerWidget(QWidget):
     def _parse_and_populate_structure(self, content: str):
         self.minimap_model.clear()
         self.document_structure.clear()
-        file_pattern = re.compile(r"(### File: `.*?`.*?)(?=### File: `|\Z)", re.DOTALL)
-        code_pattern = re.compile(r"```(?:\w*\n)?(.*?)```", re.DOTALL)
-        user_prompt_match = re.search(r"---USER-PROMPT---(.*)", content, re.DOTALL)
-        if not user_prompt_match: return
-        user_prompt_content = user_prompt_match.group(1)
+        # This regex robustly finds file blocks, even with varying content.
+        file_pattern = re.compile(r"### File: `(/.*?)`\s*```[a-z]*\n(.*?)\n```", re.DOTALL)
+        
         root_item = self.minimap_model.invisibleRootItem()
         path_map = {"/": root_item}
-        for match in file_pattern.finditer(user_prompt_content):
-            file_section = match.group(1)
-            header_match = re.search(r"### File: `(/.*?)`", file_section)
-            if header_match:
-                full_path = header_match.group(1)
-                if "relative_path" in full_path:
-                    log.warning(f"Skipping malformed path in export file: {full_path}")
-                    continue
-                all_code_blocks = code_pattern.finditer(file_section)
-                full_script_content = "\n\n".join(block.group(1).strip() for block in all_code_blocks)
-                if not full_script_content: continue
-                struct_item_index = len(self.document_structure)
-                self.document_structure.append({"header": full_path, "type": "file", "content": full_script_content, "cursor": None})
-                parts = full_path.strip('/').split('/')
-                current_path_key = ""
-                parent_item = root_item
-                for part in parts[:-1]:
-                    current_path_key += "/" + part
-                    if current_path_key not in path_map:
-                        dir_item = QStandardItem(part)
-                        dir_item.setEditable(False)
-                        dir_item.setIcon(qta.icon('fa5.folder', color='grey'))
-                        parent_item.appendRow(dir_item)
-                        path_map[current_path_key] = dir_item
-                        parent_item = dir_item
-                    else:
-                        parent_item = path_map[current_path_key]
-                file_item = QStandardItem(parts[-1])
-                file_item.setEditable(False)
-                file_item.setIcon(qta.icon('fa5.file-alt', color='grey'))
-                file_item.setData(struct_item_index, Qt.ItemDataRole.UserRole)
-                parent_item.appendRow(file_item)
+
+        for match in file_pattern.finditer(content):
+            full_path = match.group(1).strip()
+            full_script_content = match.group(2).strip()
+
+            if not full_script_content: continue
+
+            struct_item_index = len(self.document_structure)
+            self.document_structure.append({"header": full_path, "type": "file", "content": full_script_content, "cursor": None})
+
+            parts = full_path.strip('/').split('/')
+            current_path_key = ""
+            parent_item = root_item
+
+            for part in parts[:-1]: # Iterate through directories
+                current_path_key += "/" + part
+                if current_path_key not in path_map:
+                    dir_item = QStandardItem(part)
+                    dir_item.setEditable(False)
+                    dir_item.setIcon(qta.icon('fa5.folder', color='grey'))
+                    parent_item.appendRow(dir_item)
+                    path_map[current_path_key] = dir_item
+                    parent_item = dir_item
+                else:
+                    parent_item = path_map[current_path_key]
+            
+            # Add the file item
+            file_item = QStandardItem(parts[-1])
+            file_item.setEditable(False)
+            file_item.setIcon(qta.icon('fa5.file-alt', color='grey'))
+            file_item.setData(struct_item_index, Qt.ItemDataRole.UserRole)
+            parent_item.appendRow(file_item)
+
         self.minimap_tree.collapseAll()
         if root_item.rowCount() > 0:
             self.minimap_tree.expand(self.minimap_model.index(0, 0))
@@ -274,6 +274,7 @@ class AIExportViewerWidget(QWidget):
         search_cursor = QTextCursor(doc)
         search_cursor.movePosition(QTextCursor.MoveOperation.Start)
         for item in self.document_structure:
+            # Search for the header text to find its position in the document
             search_text = f"File: {item['header']}"
             cursor = doc.find(search_text, search_cursor)
             if not cursor.isNull():
@@ -288,6 +289,7 @@ class AIExportViewerWidget(QWidget):
         for item in self.document_structure:
             if item.get('type') == 'file' and item.get('cursor') and item.get('content'):
                 cursor = item['cursor']
+                # Find the start of the code block following the header
                 code_block_start_cursor = self.content_view.document().find("```", cursor)
                 if not code_block_start_cursor.isNull():
                     rect = self.content_view.cursorRect(code_block_start_cursor)

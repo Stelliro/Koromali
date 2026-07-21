@@ -10,7 +10,10 @@ class CorvusIntegrationPlugin:
         self.chat_widget_instance = None
 
         if not CORVUS_AVAILABLE:
-            log.error("Corvus Integration plugin disabled: Corvus application components could not be imported.")
+            log.info(
+                "Corvus Integration loaded as optional (corvus_app missing). "
+                "Install corvus_app to enable Tools → Corvus Chat."
+            )
             return
 
         self.api.add_menu_action(

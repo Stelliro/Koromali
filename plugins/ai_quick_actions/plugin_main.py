@@ -58,9 +58,27 @@ class AIQuickActionsPlugin:
                                 f"API Key for {provider} not found. Please add it via Tools -> Manage API Keys...")
             return
 
-        model = self.api_client.PROVIDER_CONFIG.get(provider, {}).get("models", [])
+        models = self.api_client.PROVIDER_CONFIG.get(provider, {}).get("models", [])
+        if not models:
+            QMessageBox.warning(
+                self.main_window,
+                "No Models Configured",
+                f"No models are listed for provider {provider}.",
+            )
+            return
+        # Prefer a user override when present; otherwise first configured model.
+        settings = self.api.get_manager("settings")
+        preferred = (settings.get("ai_default_model", "") or "").strip() if settings else ""
+        model = preferred if preferred in models else models[0]
+
         self.api.show_status_message(f"Sending selection to {model}...")
-        worker = AIWorker(self.api_client, provider, model, config["system"], config["user"].format(selected_code=text))
+        worker = AIWorker(
+            self.api_client,
+            provider,
+            model,
+            config["system"],
+            config["user"].format(selected_code=text),
+        )
         worker.signals.finished.connect(self._on_action_finished)
         self.thread_pool.start(worker)
 

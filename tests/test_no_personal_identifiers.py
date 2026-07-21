@@ -36,6 +36,16 @@ SKIP_DIRS = {
     "ai_exports",
     "node_modules",
     "venv",
+    ".grok",
+    ".koromali",
+    "logs",
+    "session_data",
+}
+
+# Local-only / gitignored machine state that may contain absolute user paths.
+SKIP_FILES = {
+    "Koromali_editor_settings.json",
+    "credentials.json",
 }
 
 BANNED_IDENTIFIERS = {
@@ -44,25 +54,50 @@ BANNED_IDENTIFIERS = {
 }
 
 
-def should_scan(path: Path) -> bool:
+def _tracked_files(repo_root: Path) -> set[Path]:
+    """Return paths tracked by git when available; empty set on failure."""
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(repo_root), "ls-files", "-z"],
+            capture_output=True,
+            check=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return set()
+    tracked: set[Path] = set()
+    for raw in result.stdout.split(b"\0"):
+        if not raw:
+            continue
+        tracked.add((repo_root / raw.decode("utf-8", errors="ignore")).resolve())
+    return tracked
+
+
+def should_scan(path: Path, tracked: set[Path] | None = None) -> bool:
     parts = set(path.parts)
     if parts & SKIP_DIRS:
         return False
+    if path.name in SKIP_FILES:
+        return False
     if not path.is_file():
+        return False
+    if tracked is not None and tracked and path.resolve() not in tracked:
+        # Prefer scanning only version-controlled files when git is available.
         return False
     if path.suffix.lower() in TEXT_EXTENSIONS:
         return True
-    # Allow scanning files without an extension if they look like text.
     return path.suffix == ""
 
 
 def test_repository_does_not_contain_personal_github_identifiers() -> None:
     repo_root = Path(__file__).resolve().parents[1]
+    tracked = _tracked_files(repo_root)
 
     offending_files: list[str] = []
 
     for file_path in repo_root.rglob("*"):
-        if not should_scan(file_path):
+        if not should_scan(file_path, tracked):
             continue
 
         try:

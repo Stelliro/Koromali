@@ -34,7 +34,7 @@ class Persona:
             "",
             "Your process involves the following refinement passes:",
             "",
-            "1.  **Code Formatting & Style:** Ensure the code strictly adheres to PEP 8 style guidelines. Correct indexntation, spacing, and line length.",
+            "1.  **Code Formatting & Style:** Ensure the code strictly adheres to PEP 8 style guidelines. Correct indentation, spacing, and line length.",
             "2.  **Naming Consistency:** Identify and correct any inconsistencies in variable, function, or class naming conventions (e.g., mixing camelCase and snake_case).",
             "3.  **Docstring & Comment Health:**",
             "    *   Add clear, concise docstrings to any public function, method, or class that lacks one.",

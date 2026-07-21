@@ -1,174 +1,216 @@
-# 🐧 Koromali
+# Koromali
 
-**DEVELOPED WITH AI**
+**A lightweight, extensible Python IDE built with PyQt6.**
 
-**A Modern, Extensible Python IDE built with PyQt6 and a lot of passion.**
+[![License: PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-blue.svg)](./LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
+[![Qt](https://img.shields.io/badge/UI-PyQt6-41CD52.svg)](https://www.riverbankcomputing.com/software/pyqt/)
 
-Koromali is a lightweight yet powerful Integrated Development Environment for Python developers. Built from the ground up using Python and the PyQt6 framework, it aims to provide a clean, modern, and highly customizable coding experience. It's perfect for developers who want a fast, native-feeling tool that integrates essential features like version control, a built-in terminal, and a dynamic plugin system, without the overhead of larger IDEs.
+Koromali is a native desktop editor for people who want a fast workspace with multi-project browsing, Git, a terminal, plugins, and an **AI Studio** that packages code for browser LLMs and applies writes/patches back into the tree — without the weight of a full enterprise IDE.
 
-### Why Koromali?
+**Topics:** `python` · `ide` · `editor` · `pyqt6` · `git` · `plugins` · `ai` · `llm` · `markdown` · `cross-platform` · `noncommercial`
 
-*   **For Python, By Python:** The entire application is a testament to what's possible with Python, using the powerful PyQt6 framework for its native UI.
-*   **Lightweight & Fast:** Starts quickly and stays responsive. Koromali focuses on providing the essential tools you need without the bloat.
-*   **You're in Control:** With a deep theme customizer, extensive preferences, and a simple plugin system, you can tailor the editor to your exact workflow and aesthetic.
+<p align="center">
+  <img src="docs/media/screenshot-dark.png" alt="Koromali main window (dark theme)" width="900" />
+</p>
 
-## ✨ Key Features
-
----
-
-#### 📝 **Modern Code Editor**
-*   **Advanced Syntax Highlighting:** Full Python syntax highlighting that adapts instantly to your chosen theme.
-*   **Intelligent Code Completion:** Smart suggestions, function signature hints, and detailed tooltips powered by the Jedi engine.
-*   **Go to Definition:** Instantly jump to the definition of any class, function, or variable with a single keypress (`F12`).
-*   **Efficient Text Editing:** Enjoy modern editor features like line numbers, auto-indexntation (tabs or spaces), automatic bracket/quote pairing, and multi-line editing.
-*   **Powerful Find & Replace:** A familiar and robust dialog for searching within files, with support for case sensitivity, whole words, and more.
+<p align="center">
+  <img src="assets/branding/koromali-banner.png" alt="Koromali" width="420" />
+</p>
 
 ---
 
-#### 🗂️ **Full Project & File Management**
-*   **Tabbed Project Management:** Open multiple project folders in a tabbed sidebar, allowing you to switch between different contexts effortlessly.
-*   **Intuitive File Explorer:** A full-featured file tree with a context menu to create, rename, and delete files and folders directly within the editor.
-*   **Drag and Drop:** Easily reorganize your project by dragging and dropping files and folders within the file tree.
+## Why Koromali?
+
+| | |
+|---|---|
+| **Python-native** | Editor, plugins, and tooling are all Python + Qt |
+| **Lightweight** | Focused feature set; starts without a heavy runtime |
+| **AI-friendly** | Export selected files to Markdown; paste model output and apply patches |
+| **Extensible** | Drop-in plugins with a small public API |
+| **Yours to theme** | Modern dark/light defaults plus many custom palettes |
 
 ---
 
-#### 🤖 **Advanced AI Export**
-*   **Intelligent Context Creation:** A powerful tool under the `Tools` menu designed to package your project for analysis by Large Language Models (LLMs) like GPT, Claude, or Gemini.
-*   **Selective File Inclusion:** Don't send your entire project. Use the built-in file tree to select exactly which files and folders should be included in the export, keeping the context clean and relevant.
-*   **Custom Instructions & Guidelines:** Guide the AI's analysis by providing detailed instructions and a list of specific rules or guidelines for it to follow.
-*   **Reusable Prompt Loadouts:**
-    *   Comes with pre-packaged loadouts for common tasks like "Code Review," "Documentation Generation," and "Refactoring Suggestions."
-    *   Create and save your own custom loadouts for your unique workflows.
-    *   Easily load, update, and delete your saved prompts, streamlining your interaction with AI.
-*   **Integrated Linter Results:** The export automatically includes `flake8` linter results for each selected Python file, giving the AI immediate insight into code quality issues.
+## Features
+
+### Editor
+- Theme-aware syntax highlighting (Python, JS/TS, C/C++, C#, HTML/CSS, JSON, Rust, and more)
+- Jedi-powered completion and signatures
+- Line numbers, find/replace, multi-tab editing, minimap (plugin)
+
+### Projects & files
+- Multi-project explorer with drag-and-drop
+- Large-file handling when size thresholds are hit
+
+### AI Studio
+1. **Tools → AI Studio…**
+2. Select context files
+3. **Copy** or **Save** Markdown (includes Golden Rules for the model)
+4. Paste into a browser LLM
+5. Paste the reply into **AI Patcher** → Analyze → Apply
+
+Supports full-file writes, unified diffs, deletes, and moves. Pure-Python patch apply (no system `patch` binary).
+
+<p align="center">
+  <img src="docs/media/screenshot-ai-studio.png" alt="AI Studio export dialog" width="720" />
+</p>
+
+### Tools
+- Integrated terminal, Problems panel, Output, Source Control
+- Run current file (**F5**) or project launch script (**Shift+F5**)
+- Git stage/commit/push and GitHub helpers (clone, releases)
+
+### Customization
+- Built-in **Koromali Modern** dark/light themes + Theme Editor
+- Preferences for fonts, indentation, auto-save
+- Editable Golden Rules for AI output format
 
 ---
 
-#### 🔧 **Integrated Tooling**
-*   **Flexible Dockable UI:** Rearrange the Terminal, Problems, Output, and Source Control panels to create a layout that works for you.
-*   **Built-in Terminal:** A fully interactive terminal that opens in your project's root directory. It automatically detects Python virtual environments (`venv`) for a seamless workflow.
-*   **One-Click Code Runner:** Execute Python scripts directly from the editor (`F5`) and see their output in the dedicated Output panel.
-*   **Live Linter Integration:** Get on-the-fly code analysis using `flake8`. Errors and warnings are clearly displayed in the "Problems" panel, allowing you to jump straight to the issue.
+## Quick start
+
+### Requirements
+- **Python 3.10+** (3.12 recommended)
+- Windows, macOS, or Linux
+- See `requirements.txt` (PyQt6, qtawesome, jedi, GitPython, …)
+
+### From source
+
+```bash
+git clone <your-repo-url>
+cd Koromali
+```
+
+**Windows**
+
+```cmd
+run.bat
+```
+
+**macOS / Linux**
+
+```bash
+chmod +x run.sh
+./run.sh
+```
+
+First launch creates a local `venv`, installs dependencies, and starts the app. Broken venvs are detected and recreated automatically.
+
+### Manual venv
+
+```bash
+python -m venv venv
+# Windows: venv\Scripts\activate
+# Unix:    source venv/bin/activate
+pip install -r requirements.txt
+python main.py
+```
+
+### Optional environment
+
+| Variable | Purpose |
+|----------|---------|
+| `KOROMALI_GITHUB_REPO_URL` | Upstream repo URL |
+| `KOROMALI_GITHUB_ISSUES_URL` | Issues URL |
+| `KOROMALI_GITHUB_PLUGINS_REPO` | Plugins distro (`owner/repo`) |
+| `KOROMALI_ORG_NAME` | Org display name |
 
 ---
 
-#### 🐙 **Deep Source Control & GitHub Integration**
-*   **Git Aware:** The "Source Control" panel automatically detects Git repositories and shows you changed files at a glance.
-*   **Core Git Actions:** Stage changes, commit your work with a message, and push and pull to/from your remotes with the click of a button.
-*   **Seamless GitHub Workflow:**
-    *   **Publish Project:** Have a local project that's not on Git? The "Publish" button will create a new GitHub repository and push your project to it in one go.
-    *   **Clone & Manage:** The GitHub dialog allows you to list your personal repositories, view their branches, and clone them directly to your machine.
-    *   **Create Releases:** Create new versioned releases on GitHub, complete with tags, notes, and asset uploads, all from within the app.
+## Project layout
+
+```
+Koromali/
+├── main.py / bootstrap.py   # App entry
+├── app_core/                # Managers, API, highlighters
+├── ui/                      # Main window, explorer, widgets
+├── plugins/                 # First-party plugins (AI Suite, terminal, …)
+├── assets/                  # Themes, personas, branding
+├── docs/media/              # Screenshots for docs
+├── tests/                   # Unit + UI smoke tests
+├── requirements.txt
+├── run.bat / run.sh
+└── LICENSE                  # PolyForm Noncommercial 1.0.0
+```
+
+Local-only (gitignored): `venv/`, `logs/`, `ai_exports/`, settings, credentials, `.koromali/`.
 
 ---
 
-#### 🎨 **Powerful Customization**
-*   **Advanced Theme Manager:** Koromali comes with a curated set of light and dark themes. The powerful **Theme Customizer** allows you to edit any theme, tweak every color, and save your own unique creations.
-*   **Extensive Preferences:** Customize everything from font family and size to indexntation settings (tabs vs. spaces) and auto-save behavior.
+## Plugins
+
+Each plugin is a folder under `plugins/` with `plugin.json` + entry module:
+
+```json
+{
+  "id": "example",
+  "name": "Example Plugin",
+  "author": "Koromali Team",
+  "version": "1.0.0",
+  "description": "Short description.",
+  "entry_point": "plugin_main.py"
+}
+```
+
+```python
+def initialize(koromali_api):
+    return MyPlugin(koromali_api)
+```
+
+**Security:** plugins run with full app permissions. Only load code you trust.
 
 ---
 
-#### 🔌 **Simple & Extensible Plugin System**
-*   **Dynamic Plugin Loading:** Add new features and tools to the editor without ever touching the core source code.
-*   **Easy Plugin Management:** Install new plugins by fetching them from a GitHub repository or by uploading a local `.zip` file directly through the Preferences menu.
+## Development & tests
 
-## 🚀 Getting Started
+```bash
+export PYTHONPATH=.          # Windows: set PYTHONPATH=.
+export PYTEST_DISABLE_PLUGIN_AUTOLOAD=1
+pytest tests/ -q
+```
 
-### Using the Installer (Windows)
-The easiest way to get started on Windows is to download the latest setup executable from the [**Releases**](https://github.com/<your-org>/Koromali/releases) page. The installer provides options for creating desktop and Start Menu shortcuts.
+UI smoke (Windows Qt, writes screenshots to `tests/_smoke_artifacts/`):
 
-### Running from Source
-To run the editor from the source code, you will need `Python 3` and `Git` installed on your system. The repository includes convenient scripts to automate the setup process.
+```bash
+set QT_QPA_PLATFORM=windows
+pytest tests/test_ui_smoke.py -v -s
+```
 
-1.  **Clone the Repository:**
-    ```bash
-    git clone https://github.com/<your-org>/Koromali.git
-    cd Koromali
-    ```
+---
 
-2.  **Run the Setup Script:**
-    *   **On Windows:** Double-click `run.bat` or run it from the command line.
-        ```cmd
-        .\run.bat
-        ```
-    *   **On macOS/Linux:** Make the script executable and run it.
-        ```bash
-        chmod +x run.sh
-        ./run.sh
-        ```
+## Privacy
 
-    The first time you run the script, it will automatically create a local virtual environment (`venv`), install all the required dependencies from `requirements.txt`, and then launch the application. Subsequent runs will be much faster as they will use the existing environment.
+Settings, tokens, and API keys live in the **application data** directory, not the project tree:
 
-## 📦 Creating a Windows Installer
+| OS | Path |
+|----|------|
+| Windows | `%LOCALAPPDATA%\Koromali\Koromali` |
+| Linux | `~/.local/share/Koromali/Koromali` |
+| macOS | `~/Library/Application Support/Koromali/Koromali` |
 
-A Windows installer is built automatically for each new version tag pushed to the repository via **GitHub Actions**.
+Do not commit `credentials.json` or `Koromali_editor_settings.json`.
 
-To build an installer for your own application using Koromali, you can use the built-in **Installer Builder** plugin found under the `Tools` menu. This powerful tool allows you to define a highly customized installer using a single Markdown configuration file.
+---
 
-#### Features of the Markdown Installer
-*   **Define Metadata:** Set your application's name, version, author, and icons.
-*   **Custom Pages:** Create custom installer pages like Welcome, License Agreement, and Finish screens directly from Markdown text.
-*   **Optional Components:** Use Markdown checklists to offer optional installation components like desktop shortcuts or additional plugins.
-*   **Remote Content:** Create installer pages that download and install additional content (like asset packs or updates) from a URL during installation.
+## License
 
-For detailed instructions on the Markdown syntax, open the Installer Builder from the `Tools` menu.
+**[PolyForm Noncommercial License 1.0.0](./LICENSE)** — free for personal, educational, research, hobby, and non-profit use. **Not for commercial use** without a separate commercial license.
 
-## 🔒 Security & Privacy
+See [`LICENSE.md`](./LICENSE.md) for a short summary and [`LICENSE`](./LICENSE) for the full text.
 
-**Important:** The editor stores your personal settings, including your GitHub access token and API keys, in your local application data directory.
-*   **Windows:** `%LOCALAPPDATA%\Koromali\Koromali`
-*   **Linux:** `~/.local/share/Koromali/Koromali`
-*   **macOS:** `~/Library/Application Support/Koromali/Koromali`
+Required Notice: Copyright Koromali contributors.
 
-These configuration files are specific to your machine and are **never** included in project-level operations like "Export for AI", version control, or installer builds.
+---
 
-Always be mindful not to hard-code sensitive information like passwords or API keys directly into your source code.
+## Contributing
 
-## 🧩 The Plugin System
+Bug reports and focused PRs are welcome. Prefer small changes with a note of what you verified (tests or manual smoke).
 
-Koromali can be extended with custom plugins.
+Suggested GitHub topics and About blurb: [`docs/TOPICS.md`](./docs/TOPICS.md).
 
-**🔒 Security Warning:** Plugins are powerful and execute with the same permissions as the editor itself. For your security, **only install plugins from authors and sources you trust.** Koromali cannot vet the safety or integrity of third-party plugins.
+---
 
-#### For Users
-You can install new plugins easily:
-1.  Navigate to `File > Preferences > Plugins`.
-2.  **From GitHub:** Enter a repository URL (like `<your-org>/Koromali-plugins`) and click "Fetch" to see a list of available plugins.
-3.  **From a File:** Click "Install from File..." to upload a `.zip` archive of a plugin.
-4.  After installation, a restart will be required to load the new plugin.
+## Version
 
-#### For Developers
-Creating a plugin is simple. Each plugin lives in its own subdirectory inside `/plugins` and must contain two files:
-1.  **`plugin.json`**: A manifest file describing your plugin.
-    ```json
-    {
-        "name": "My Awesome Plugin",
-        "author": "Your Name",
-        "version": "1.0.0",
-        "description": "This plugin does awesome things.",
-        "entry_point": "plugin_main.py"
-    }
-    ```
-2.  **`plugin_main.py`** (or your specified `entry_point`): The Python file with your plugin's logic. It must contain an `initialize(main_window)` function.
-    ```python
-    from PyQt6.QtGui import QAction
-    
-    def initialize(main_window):
-        # main_window is an instance of the MainWindow class
-        action = QAction("Do Awesome Thing", main_window)
-        action.triggered.connect(lambda: print("Awesome thing done!"))
-        
-        # You can access existing menus or create new ones
-        main_window.tools_menu.addAction(action)
-
-        # The function should return the plugin instance if it needs to persist
-        return None 
-    ```
-
-## 🤝 Contributing
-Contributions are welcome! Whether it's reporting a bug, suggesting a new feature, or submitting a pull request, your help is appreciated. Please feel free to open an issue to discuss your ideas.
-
-## 📜 License
-This project is licensed under the **Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License**.
-
-In short, you are free to share and adapt the material for **non-commercial purposes**, as long as you give appropriate credit and distribute your contributions under the same license. For the full license text, please see the `LICENSE.md` file.
+See [`VERSION.txt`](./VERSION.txt).

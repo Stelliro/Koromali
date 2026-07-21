@@ -30,7 +30,8 @@ class TerminalWidget(QWidget):
         self._connect_signals()
         self.update_theme()
         self.start_shell()
-        self._on_project_changed() # Set initial state
+        # Sync venv toolbar buttons to current project (no project → create disabled).
+        self._on_project_changed()
 
     def _setup_ui(self):
         """Initializes the UI components."""
@@ -118,10 +119,11 @@ class TerminalWidget(QWidget):
         venv_exists = bool(venv_path and os.path.isdir(venv_path))
         reqs_exist = bool(reqs_path and os.path.isfile(reqs_path))
         
-        self.create_venv_button.setEnabled(proj_path and not venv_exists)
-        self.activate_venv_button.setEnabled(venv_exists)
-        self.install_reqs_button.setEnabled(venv_exists and reqs_exist)
-        self.remove_venv_button.setEnabled(venv_exists)
+        # FIX: Wrap the condition in bool() so it never returns None
+        self.create_venv_button.setEnabled(bool(proj_path and not venv_exists))
+        self.activate_venv_button.setEnabled(bool(venv_exists))
+        self.install_reqs_button.setEnabled(bool(venv_exists and reqs_exist))
+        self.remove_venv_button.setEnabled(bool(venv_exists))
 
         dock = self.parent()
         while dock and not isinstance(dock, QWidget if not hasattr(self.main_window, "ClosableDockWidget") else self.main_window.ClosableDockWidget):

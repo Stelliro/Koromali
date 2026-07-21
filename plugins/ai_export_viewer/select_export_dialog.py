@@ -45,7 +45,7 @@ class SelectExportDialog(QDialog):
                     all_files.append((path, display_name))
         
         # Sort by most recent first
-        all_files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
+        all_files.sort(key=lambda x: os.path.getmtime(x[0]), reverse=True)
 
         for path, display_name in all_files:
             item = QListWidgetItem(display_name)

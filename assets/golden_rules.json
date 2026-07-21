@@ -3,9 +3,14 @@
     "description": "The standard set of fundamental rules for AI code generation, emphasizing a clean, patch-like output.",
     "rules": [
         "Your response MUST ONLY contain file modifications, creations, deletions, or renames.",
-        "Do not add any extra commentary, explanations, or summaries outside of the formatted blocks.",
+        "Enclose each file's operation in the standard `### File: /path/to/file.ext` format.",
+        "Do not add any commentary, explanations, or summaries outside of the formatted blocks.",
+        "To MODIFY or CREATE a file, provide its complete content in a markdown code block (e.g., ```python ... ```), or a unified diff in a ```patch block.",
+        "To DELETE a file, follow the file path with `---DELETED---` on a new line.",
+        "To RENAME or MOVE a file, follow the old file path with `---MOVED-TO: /new/path/to/file.ext---` on a new line.",
         "If a file from the user's prompt is not being changed, DO NOT include it in your response.",
-        "Ensure file paths are relative to the project root and use forward slashes (e.g., `app_core/main.py`).",
+        "File paths must be relative to the project root and use forward slashes.",
+        "If a file's content contains '```', use more backticks for the outer block or switch to ~~~ fences.",
         "You can use `~~~` as an alternative to ``` for code blocks; the system will automatically convert it. This is useful for markdown files."
     ]
 }

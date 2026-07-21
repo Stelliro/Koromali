@@ -88,7 +88,7 @@ class ThemeEditorDialog(QDialog):
                 "git.status.foreground"
             ],
             "Tree & List View": [
-                "tree.indexntationGuides.stroke", "tree.trace.color",
+                "tree.indentationGuides.stroke", "tree.trace.color",
                 "tree.trace.shadow", "tree.node.color", "tree.node.fill",
                 "list.hoverBackground", "list.activeSelectionBackground",
                 "list.activeSelectionForeground", "list.inactiveSelectionBackground",

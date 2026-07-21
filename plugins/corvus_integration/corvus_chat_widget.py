@@ -8,12 +8,15 @@ import qtawesome as qta
 from app_core.koromali_api import KoromaliPluginAPI
 from utils.logger import log
 
-# Attempt to import the Corvus assistant. Handle gracefully if it fails.
+# Optional dependency — plugin stays installed but idle without corvus_app.
 try:
     from corvus_app.assistant import Assistant
     CORVUS_AVAILABLE = True
 except ImportError as e:
-    log.error(f"Corvus Integration: Could not import Corvus assistant: {e}")
+    log.warning(
+        "Corvus Integration disabled (optional package 'corvus_app' not installed): %s",
+        e,
+    )
     Assistant = None
     CORVUS_AVAILABLE = False
 

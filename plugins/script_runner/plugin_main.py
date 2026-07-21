@@ -3,11 +3,17 @@ import os
 import sys
 import shutil
 import platform
+from typing import Optional
+
 from PyQt6.QtWidgets import QMessageBox
 from PyQt6.QtCore import QObject, QProcess, QTimer
 from app_core.koromali_api import KoromaliPluginAPI
+from ui.dialogs.run_config_dialog import RunConfigDialog
 from .output_panel import OutputPanel
 from utils.logger import log
+
+# settings key: { absolute_project_root: relative_launch_script }
+LAUNCH_SCRIPTS_SETTING = "project_launch_scripts"
 
 
 class ScriptRunnerPlugin(QObject):
@@ -59,6 +65,22 @@ class ScriptRunnerPlugin(QObject):
             action.setEnabled(False)
             self.run_actions[config['menu_text']] = action
 
+        self.configure_launch_action = self.api.add_menu_action(
+            "run",
+            "Configure Project Launch Script...",
+            self._configure_project_launch_script,
+            None,
+            "mdi.rocket-launch-outline",
+        )
+        self.run_project_action = self.api.add_menu_action(
+            "run",
+            "Run Project Launch Script",
+            self._run_project_launch_script,
+            "Shift+F5",
+            "mdi.play-circle-outline",
+        )
+        self.run_project_action.setEnabled(False)
+
         self.stop_action = self.api.add_menu_action("run", "Stop Script", self.stop_script, "Ctrl+F2",
                                                     'mdi.stop-circle-outline')
         self.stop_action.setEnabled(False)
@@ -66,6 +88,7 @@ class ScriptRunnerPlugin(QObject):
         py_action = self.run_actions.get('Run Python Script')
         if py_action:
             self.api.add_toolbar_action(py_action)
+        self.api.add_toolbar_action(self.run_project_action)
         self.api.add_toolbar_action(self.stop_action)
 
     def _connect_signals(self):
@@ -73,24 +96,117 @@ class ScriptRunnerPlugin(QObject):
         self.main_window.tab_widget.currentChanged.connect(self._on_tab_changed)
         QTimer.singleShot(100, lambda: self._on_tab_changed(self.main_window.tab_widget.currentIndex()))
         self.main_window.theme_changed_signal.connect(self.output_panel.update_theme)
+        project_manager = self.api.get_manager("project")
+        if project_manager and hasattr(project_manager, "projects_changed"):
+            project_manager.projects_changed.connect(self._refresh_project_run_state)
+        QTimer.singleShot(150, self._refresh_project_run_state)
 
-    def _on_tab_changed(self, indexx: int):
+    def _active_project_root(self) -> Optional[str]:
+        project_manager = self.api.get_manager("project")
+        if not project_manager:
+            return None
+        path = project_manager.get_active_project_path()
+        return os.path.normpath(path) if path else None
+
+    def _get_launch_script_map(self) -> dict:
+        settings = self.api.get_manager("settings")
+        data = settings.get(LAUNCH_SCRIPTS_SETTING, {}) if settings else {}
+        return data if isinstance(data, dict) else {}
+
+    def _set_launch_script(self, project_root: str, relative_script: str) -> None:
+        settings = self.api.get_manager("settings")
+        if not settings:
+            return
+        mapping = dict(self._get_launch_script_map())
+        mapping[os.path.normpath(project_root)] = relative_script.replace("\\", "/")
+        settings.set(LAUNCH_SCRIPTS_SETTING, mapping)
+
+    def _resolve_launch_script_path(self, project_root: Optional[str] = None) -> Optional[str]:
+        root = project_root or self._active_project_root()
+        if not root:
+            return None
+        mapping = self._get_launch_script_map()
+        rel = mapping.get(os.path.normpath(root)) or mapping.get(root)
+        if not rel:
+            return None
+        abs_root = os.path.abspath(root)
+        abs_path = os.path.abspath(os.path.join(root, rel))
+        try:
+            common = os.path.normcase(os.path.commonpath([abs_root, abs_path]))
+        except ValueError:
+            common = ""
+        if common != os.path.normcase(abs_root):
+            log.warning("ScriptRunner: launch script path escapes project root; ignoring.")
+            return None
+        return abs_path if os.path.isfile(abs_path) else None
+
+    def _refresh_project_run_state(self, *_args):
+        has_project = bool(self._active_project_root())
+        has_launch = bool(self._resolve_launch_script_path())
+        if hasattr(self, "configure_launch_action") and self.configure_launch_action:
+            self.configure_launch_action.setEnabled(has_project)
+        if hasattr(self, "run_project_action") and self.run_project_action:
+            self.run_project_action.setEnabled(has_project and has_launch)
+
+    def _configure_project_launch_script(self):
+        root = self._active_project_root()
+        if not root:
+            self.api.show_message(
+                "info", "No Project", "Open a project before configuring a launch script."
+            )
+            return
+
+        dialog = RunConfigDialog(root, parent=self.main_window)
+        if not dialog.exec() or not dialog.selected_script:
+            return
+
+        rel = os.path.relpath(dialog.selected_script, root).replace("\\", "/")
+        self._set_launch_script(root, rel)
+        self._refresh_project_run_state()
+        self.api.show_status_message(f"Project launch script set to {rel}", 4000)
+        log.info("ScriptRunner: launch script for %s -> %s", root, rel)
+
+    def _run_project_launch_script(self):
+        path = self._resolve_launch_script_path()
+        if not path:
+            # Offer to configure immediately if missing/stale.
+            root = self._active_project_root()
+            if not root:
+                self.api.show_message("info", "No Project", "Open a project first.")
+                return
+            reply = QMessageBox.question(
+                self.main_window,
+                "No Launch Script",
+                "No launch script is configured for this project (or the file is missing).\n\n"
+                "Configure one now?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes,
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                self._configure_project_launch_script()
+                path = self._resolve_launch_script_path()
+            if not path:
+                return
+        self.run_specific_script(path)
+
+    def _on_tab_changed(self, index: int):
         """Updates the enabled state of run actions based on the current file type."""
-        log.debug(f"ScriptRunner: Tab changed to indexx {indexx}.")
+        log.debug(f"ScriptRunner: Tab changed to index {index}.")
         active_ext = None
 
-        widget = self.main_window.tab_widget.widget(indexx)
+        widget = self.main_window.tab_widget.widget(index)
         if widget and hasattr(widget, 'filepath') and widget.filepath:
             _, active_ext = os.path.splitext(widget.filepath)
             log.debug(f"ScriptRunner: Filepath found with extension '{active_ext}'.")
         else:
-            log.debug(f"ScriptRunner: Current tab widget at indexx {indexx} has no 'filepath' attribute or is None.")
+            log.debug(f"ScriptRunner: Current tab widget at index {index} has no 'filepath' attribute or is None.")
 
         for ext, config in self.RUN_CONFIG.items():
             action = self.run_actions.get(config['menu_text'])
             if action:
-                is_enabled = (active_ext is not None and ext == active_ext)
+                is_enabled = bool(active_ext is not None and ext == active_ext)
                 action.setEnabled(is_enabled)
+        self._refresh_project_run_state()
 
     def stop_script(self):
         """Terminates the currently running script process."""
@@ -131,10 +247,24 @@ class ScriptRunnerPlugin(QObject):
     def _find_python_interpreter(self) -> str:
         """Intelligently finds the best Python executable for running scripts."""
         settings_manager = self.api.get_manager("settings")
-        user_path = settings_manager.get("python_interpreter_path", "").strip()
+        user_path = (settings_manager.get("python_interpreter_path", "") or "").strip()
         if user_path and os.path.exists(user_path) and "Koromali.exe" not in user_path:
             log.info(f"ScriptRunner: Using user-defined interpreter: {user_path}")
             return user_path
+
+        # Prefer active project's virtualenv when present.
+        project_root = self._active_project_root()
+        if project_root:
+            candidates = [
+                os.path.join(project_root, "venv", "Scripts", "python.exe"),
+                os.path.join(project_root, ".venv", "Scripts", "python.exe"),
+                os.path.join(project_root, "venv", "bin", "python"),
+                os.path.join(project_root, ".venv", "bin", "python"),
+            ]
+            for candidate in candidates:
+                if os.path.isfile(candidate):
+                    log.info("ScriptRunner: Using project venv interpreter: %s", candidate)
+                    return candidate
 
         if getattr(sys, 'frozen', False):
             local_python_path = os.path.join(os.path.dirname(sys.executable), "python.exe")
@@ -147,7 +277,7 @@ class ScriptRunnerPlugin(QObject):
                 log.info(f"ScriptRunner: Running from source, using sys.executable: {sys.executable}")
                 return sys.executable
 
-        system_python = shutil.which("python")
+        system_python = shutil.which("python") or shutil.which("python3")
         if system_python and "Koromali.exe" not in system_python:
             log.info(f"ScriptRunner: Found system python on PATH: {system_python}")
             return system_python

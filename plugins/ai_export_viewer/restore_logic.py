@@ -17,13 +17,14 @@ def parse_export_file(export_path: str) -> Dict[str, str]:
             content = f.read()
 
         # Regex to find file blocks, robustly handling optional language specifiers
+        # Looks for ### File: `/path/to/file.ext`
         pattern = re.compile(
             r"### File:\s*`(/.*?)`\s*\n```(?:\w*\n)?(.*?)\n```", re.DOTALL
         )
 
         matches = pattern.finditer(content)
         for match in matches:
-            # path is like /folder/file.py, remove leading slash
+            # path is like /folder/file.py, so we remove the leading slash
             rel_path = match.group(1).strip().lstrip('/')
             file_content = match.group(2).strip()
             # Normalize path separators for cross-platform consistency
