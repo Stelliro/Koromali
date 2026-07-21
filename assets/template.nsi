@@ -30,7 +30,6 @@ OutFile "${OUT_FILE}"
 InstallDir "$PROGRAMFILES64\${PRODUCT_NAME}"
 ShowInstDetails show
 RequestExecutionLevel admin
-SetShellVarContext all
 
 !include "MUI2.nsh"
 !define MUI_ABORTWARNING
@@ -59,11 +58,8 @@ SetShellVarContext all
 !GENERATED_FUNCTIONS_GOES_HERE!
 
 
-Function FinishPagePrompt
-  MessageBox MB_YESNO|MB_ICONQUESTION "Do you want to set Koromali as the default application for common code file types (.py, .js, .txt, etc.)?" /SD IDYES IDYES Register IDNO DontRegister
-  Register:
-    Call RegisterFileAssociations
-  DontRegister:
+Function .onInit
+  SetShellVarContext all
 FunctionEnd
 
 Function .onInstSuccess
@@ -78,5 +74,5 @@ Function .onInstSuccess
 FunctionEnd
 
 Function un.onInit
-    SetShellVarContext all
+  SetShellVarContext all
 FunctionEnd
